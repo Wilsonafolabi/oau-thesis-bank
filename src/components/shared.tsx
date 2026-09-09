@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useContext, createContext, ReactNode, MouseEvent, ChangeEvent } from 'react';
+import { motion } from 'framer-motion';
 import {
   Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
   LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
@@ -12,6 +12,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
+
+// --- THEME ---
 
 export const theme = {
   colors: {
@@ -52,15 +54,26 @@ export const MOCK_MESSAGES = [
 
 // --- CONTEXT & ROUTING ---
 
-export const RouterContext = createContext<any>(null);
+export interface RouterContextType {
+  currentScreen: { id: string; params?: Record<string, any> };
+  navigate: (id: string, params?: Record<string, any>) => void;
+  user: any;
+  setUser: React.Dispatch<React.SetStateAction<any>>;
+}
 
-export const useAppRouter = () => useContext(RouterContext);
+export const RouterContext = createContext<RouterContextType | null>(null);
 
-export const AppProvider = ({ children }) => {
+export const useAppRouter = () => {
+  const context = useContext(RouterContext);
+  if (!context) throw new Error('useAppRouter must be used within an AppProvider');
+  return context;
+};
+
+export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentScreen, setCurrentScreen] = useState({ id: 'landing', params: {} });
-  const [user, setUser] = useState(null); // null = unauthenticated
+  const [user, setUser] = useState<any>(null);
 
-  const navigate = (id, params = {}) => {
+  const navigate = (id: string, params = {}) => {
     window.scrollTo(0, 0);
     setCurrentScreen({ id, params });
   };
@@ -72,7 +85,25 @@ export const AppProvider = ({ children }) => {
   );
 };
 
-export const Button = ({ children, variant = 'primary', size = 'md', className = '', onClick = undefined, type = 'button', disabled = false }) => {
+// --- UI COMPONENTS ---
+
+export const Button = ({
+  children,
+  variant = 'primary',
+  size = 'md',
+  type = 'button',
+  onClick,
+  disabled = false,
+  className = '',
+}: {
+  children: ReactNode;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+  type?: 'button' | 'submit' | 'reset';
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  className?: string;
+}) => {
   const baseStyle = "inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition-all duration-200 ease-in-out rounded-md outline-none focus:ring-2 focus:ring-offset-2";
   const sizes = {
     sm: 'px-3 py-1.5 text-xs',
@@ -85,30 +116,77 @@ export const Button = ({ children, variant = 'primary', size = 'md', className =
     ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
     danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-600",
   };
+
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`${baseStyle} ${sizes[size]} ${variants[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseStyle} ${sizes[size]} ${variants[variant]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+    >
       {children}
     </button>
   );
 };
 
-export const Input = ({ label, type = 'text', placeholder = '', className = '', value = '', onChange = () => {}, disabled = false }) => (
+export const Input = ({ 
+  label, 
+  type = 'text', 
+  placeholder = '', 
+  className = '', 
+  value = '', 
+  onChange = () => {}, 
+  disabled = false 
+}: {
+  label?: string;
+  type?: string;
+  placeholder?: string;
+  className?: string;
+  value?: string | number;
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
+}) => (
   <div className={`flex flex-col space-y-1.5 ${className}`}>
     {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
     <input
-      type={type} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled}
+      type={type} 
+      placeholder={placeholder} 
+      value={value} 
+      onChange={onChange} 
+      disabled={disabled}
       className="px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#00502F] focus:border-[#00502F] sm:text-sm text-slate-900 placeholder-slate-400"
     />
   </div>
 );
 
-export const Card = ({ children, className = '', hover = false, onClick = undefined }) => (
-  <div onClick={onClick} className={`bg-white rounded-lg border ${theme.colors.border} shadow-sm overflow-hidden ${hover ? 'hover:shadow-md transition-shadow cursor-pointer' : ''} ${className}`}>
+export const Card = ({ 
+  children, 
+  className = '', 
+  hover = false, 
+  onClick 
+}: { 
+  children: ReactNode; 
+  className?: string; 
+  hover?: boolean; 
+  onClick?: () => void;
+}) => (
+  <div 
+    onClick={onClick} 
+    className={`bg-white rounded-lg border ${theme.colors.border} shadow-sm overflow-hidden ${hover ? 'hover:shadow-md transition-shadow cursor-pointer' : ''} ${className}`}
+  >
     {children}
   </div>
 );
 
-export const Badge = ({ children, variant = 'gray', className = '' }) => {
+export const Badge = ({ 
+  children, 
+  variant = 'gray', 
+  className = '' 
+}: { 
+  children: ReactNode; 
+  variant?: 'gray' | 'green' | 'gold' | 'blue'; 
+  className?: string;
+}) => {
   const variants = {
     gray: 'bg-slate-100 text-slate-700 border-slate-200',
     green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -140,10 +218,13 @@ export const itemVariants = {
   show: { opacity: 1, y: 0 }
 };
 
-export const PublicLayout = ({ children }) => {
+// --- LAYOUT COMPONENTS ---
+
+export const PublicLayout = ({ children }: { children: ReactNode }) => {
   const { navigate } = useAppRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const go = (id) => { setMenuOpen(false); navigate(id); };
+  const go = (id: string) => { setMenuOpen(false); navigate(id); };
+  
   return (
     <div className={`min-h-screen ${theme.colors.background} font-sans text-slate-900 flex flex-col`}>
       <header className="bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-50">
@@ -192,7 +273,7 @@ export const PublicLayout = ({ children }) => {
   );
 };
 
-export const AuthenticatedLayout = ({ children, title, admin = false }) => {
+export const AuthenticatedLayout = ({ children, title, admin = false }: { children: ReactNode; title: string; admin?: boolean }) => {
   const { navigate, currentScreen } = useAppRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -219,7 +300,7 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
 
   const items = admin ? adminItems : userItems;
   const active = currentScreen?.id;
-  const go = (id) => { setMobileOpen(false); navigate(id); };
+  const go = (id: string) => { setMobileOpen(false); navigate(id); };
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] font-sans text-slate-900 flex">
@@ -249,7 +330,7 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
           <p className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{admin ? 'Administration' : 'Workspace'}</p>
-          {items.map((item) => {
+          {items.map((item: any) => {
             const isActive = active === item.id;
             return (
               <button key={item.id} onClick={() => go(item.id)} className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${isActive ? 'bg-emerald-50 text-[#00502F]' : 'text-slate-600 hover:bg-slate-50 hover:text-[#00502F]'}`}>
@@ -286,7 +367,7 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
   );
 };
 
-export const AuthContainer = ({ children, title, subtitle }) => (
+export const AuthContainer = ({ children, title, subtitle }: { children: ReactNode; title: string; subtitle: string }) => (
   <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
       <BookOpen className={`mx-auto h-12 w-12 ${theme.colors.primaryText}`} />
@@ -301,7 +382,9 @@ export const AuthContainer = ({ children, title, subtitle }) => (
   </div>
 );
 
-export const ThesisCard = ({ thesis, onClick }) => (
+// --- DOMAIN COMPONENTS ---
+
+export const ThesisCard = ({ thesis, onClick }: { thesis: any; onClick?: () => void }) => (
   <Card hover className="p-5 flex flex-col h-full" onClick={onClick}>
     <div className="flex justify-between items-start mb-2">
       <Badge variant={thesis.status === 'Published' ? 'green' : 'gray'}>{thesis.status}</Badge>
@@ -311,14 +394,14 @@ export const ThesisCard = ({ thesis, onClick }) => (
     <p className="text-sm text-slate-500 mb-4">{thesis.author} • {thesis.dept}</p>
     <p className="text-sm text-slate-600 line-clamp-3 mb-4 flex-1">{thesis.abstract}</p>
     <div className="flex flex-wrap gap-2 mt-auto">
-      {thesis.tags.slice(0, 2).map(tag => (
+      {thesis.tags.slice(0, 2).map((tag: string) => (
         <span key={tag} className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">{tag}</span>
       ))}
     </div>
   </Card>
 );
 
-export const UploadWizardNav = ({ step }) => (
+export const UploadWizardNav = ({ step }: { step: number }) => (
   <div className="flex items-center justify-center space-x-4 mb-10">
     {[1, 2, 3, 4, 5].map(i => (
       <React.Fragment key={i}>
