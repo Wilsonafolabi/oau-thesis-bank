@@ -1,3 +1,4 @@
+from recommendation.service import RecommendationService
 import os
 import json
 import hashlib
@@ -138,3 +139,204 @@ async def get_graphs():
 if __name__ == "__main__":
     logger.info("server_starting", port=8000)
     uvicorn.run(app, host="0.0.0.0", port=8000)
+# ==========================================
+# RECOMMENDATION API ENDPOINTS (Section 7.8 & 13)
+# ==========================================
+from pydantic import BaseModel
+from datetime import datetime
+
+# Mock thesis metadata for the baseline engine (Replace with actual DB fetch in production)
+MOCK_THESES_METADATA = [
+    {"id": "thesis_1", "title": "Sample Thesis 1", "created_at": datetime.utcnow()},
+    {"id": "thesis_2", "title": "Sample Thesis 2", "created_at": datetime.utcnow()},
+    {"id": "thesis_3", "title": "Sample Thesis 3", "created_at": datetime.utcnow()},
+]
+
+# Initialize the Recommendation Service
+rec_service = RecommendationService(theses=MOCK_THESES_METADATA)
+
+class InteractionRequest(BaseModel):
+    user_id: str
+    thesis_id: str
+    event_type: str  # Must be 'view', 'download', or 'save'
+
+@app.post("/api/ai/interact")
+async def log_interaction(req: InteractionRequest):
+    """
+    Section 7.8: Logs user interactions to build the dataset for the learned model.
+    Call this from the frontend whenever a user views, downloads, or saves a thesis.
+    """
+    rec_service.logger_tool.log_event(req.user_id, req.thesis_id, req.event_type)
+    return {"status": "success", "message": f"Logged {req.event_type} for thesis {req.thesis_id}"}
+
+@app.get("/api/ai/recommend")
+async def get_recommendations(user_id: str, top_k: int = 5):
+    """
+    Returns recommendations. Automatically uses the Learned Model if trained, 
+    otherwise falls back to the Popularity/Recency Baseline.
+    """
+    recs = rec_service.get_recommendations(user_id, top_k)
+    model_used = "learned_model" if rec_service.use_learned else "popularity_recency_baseline"
+    return {"user_id": user_id, "recommendations": recs, "model_used": model_used}
+
+@app.post("/api/ai/train-recommendation")
+async def train_recommendation_model():
+    """
+    Section 13: Manually trigger training of the learned Matrix Factorization model.
+    Call this once you have collected sufficient real interaction data (e.g., > 10 events).
+    """
+    interactions = rec_service.logger_tool.interactions
+    if len(interactions) < 10:
+        return {"status": "skipped", "message": f"Need at least 10 interactions to train. Currently have {len(interactions)}."}
+    
+    rec_service.train_on_data(interactions)
+    return {"status": "success", "message": "Learned model trained successfully.", "interactions_used": len(interactions)}
+
+# ==========================================
+# RECOMMENDATION API ENDPOINTS (Section 7.8 & 13)
+# ==========================================
+from pydantic import BaseModel
+from datetime import datetime
+
+# Mock thesis metadata for the baseline engine (Replace with actual DB fetch in production)
+MOCK_THESES_METADATA = [
+    {"id": "thesis_1", "title": "Sample Thesis 1", "created_at": datetime.utcnow()},
+    {"id": "thesis_2", "title": "Sample Thesis 2", "created_at": datetime.utcnow()},
+    {"id": "thesis_3", "title": "Sample Thesis 3", "created_at": datetime.utcnow()},
+]
+
+# Initialize the Recommendation Service
+rec_service = RecommendationService(theses=MOCK_THESES_METADATA)
+
+class InteractionRequest(BaseModel):
+    user_id: str
+    thesis_id: str
+    event_type: str  # Must be 'view', 'download', or 'save'
+
+@app.post("/api/ai/interact")
+async def log_interaction(req: InteractionRequest):
+    """
+    Section 7.8: Logs user interactions to build the dataset for the learned model.
+    Call this from the frontend whenever a user views, downloads, or saves a thesis.
+    """
+    rec_service.logger_tool.log_event(req.user_id, req.thesis_id, req.event_type)
+    return {"status": "success", "message": f"Logged {req.event_type} for thesis {req.thesis_id}"}
+
+@app.get("/api/ai/recommend")
+async def get_recommendations(user_id: str, top_k: int = 5):
+    """
+    Returns recommendations. Automatically uses the Learned Model if trained, 
+    otherwise falls back to the Popularity/Recency Baseline.
+    """
+    recs = rec_service.get_recommendations(user_id, top_k)
+    model_used = "learned_model" if rec_service.use_learned else "popularity_recency_baseline"
+    return {"user_id": user_id, "recommendations": recs, "model_used": model_used}
+
+@app.post("/api/ai/train-recommendation")
+async def train_recommendation_model():
+    """
+    Section 13: Manually trigger training of the learned Matrix Factorization model.
+    Call this once you have collected sufficient real interaction data (e.g., > 10 events).
+    """
+    interactions = rec_service.logger_tool.interactions
+    if len(interactions) < 10:
+        return {"status": "skipped", "message": f"Need at least 10 interactions to train. Currently have {len(interactions)}."}
+    
+    rec_service.train_on_data(interactions)
+    return {"status": "success", "message": "Learned model trained successfully.", "interactions_used": len(interactions)}
+
+
+# ==========================================
+# NEW AI INTELLIGENCE ENDPOINTS (Sections 7.7, 7.8, 7.10)
+# ==========================================
+from pydantic import BaseModel
+import numpy as np
+from research_intelligence.gap_engine import GapEngine
+from proposal_checker.service import ProposalChecker
+from research_network.graph import ResearchNetworkGraph
+
+# Initialize engines (Singleton pattern for the app lifecycle)
+gap_engine = GapEngine()
+network_graph = ResearchNetworkGraph()
+
+# Mock embedding service for the API endpoint (Replace with your actual embeddings.service import in production)
+class MockEmbeddingService:
+    def embed_text(self, text: str):
+        # Returns a dummy 384-dim vector for demonstration (all-MiniLM-L6-v2 dimension)
+        return np.random.rand(384).astype(np.float32)
+
+proposal_checker = ProposalChecker(embedding_service=MockEmbeddingService())
+
+class ProposalCheckRequest(BaseModel):
+    proposal_text: str
+    threshold: float = 0.85
+
+class AddEdgeRequest(BaseModel):
+    researcher_a: str
+    researcher_b: str
+    basis_document_id: str
+    basis_type: str = "co_authorship"
+
+@app.get("/api/ai/detect-gaps")
+async def detect_gaps():
+    """
+    Section 7.7 & 7.10: Triggers unsupervised research-gap detection using BERTopic.
+    Uses synthetic data per Section 7.3 until real corpus is loaded.
+    """
+    mock_texts = [
+        "Machine learning applications in African agricultural systems.",
+        "Deep learning for medical imaging in resource-constrained settings.",
+        "Machine learning applications in African agricultural systems." # Duplicate to force a low-count topic
+    ]
+    mock_ids = ["thesis_1", "thesis_2", "thesis_3"]
+    
+    gaps = gap_engine.detect_gaps(thesis_texts=mock_texts, thesis_ids=mock_ids)
+    return {"status": "success", "gaps_detected": len(gaps), "gaps": gaps}
+
+@app.post("/api/ai/check-proposal")
+async def check_proposal(req: ProposalCheckRequest):
+    """
+    Section 7.10: Semantic similarity/plagiarism review engine.
+    Checks new proposal text against existing corpus chunks.
+    """
+    # Mock corpus chunks (Replace with actual DB/Vector DB fetch in production)
+    mock_chunks = [
+        {
+            "thesis_id": "thesis_1", 
+            "id": "chunk_1", 
+            "vector": np.random.rand(384).astype(np.float32), 
+            "text": "This is a sample existing thesis text about machine learning in agriculture...", 
+            "page": 12
+        }
+    ]
+    
+    flagged = proposal_checker.check_similarity(
+        new_proposal_text=req.proposal_text, 
+        existing_thesis_chunks=mock_chunks, 
+        threshold=req.threshold
+    )
+    
+    return {
+        "status": "success", 
+        "threshold_used": req.threshold,
+        "flagged_chunks_count": len(flagged),
+        "flagged_chunks": flagged
+    }
+
+@app.post("/api/ai/network/add-edge")
+async def add_network_edge(req: AddEdgeRequest):
+    """
+    Section 7.8: Adds a provenance-required collaboration edge.
+    Rejects the request if no basis_document_id is provided.
+    """
+    success = network_graph.add_provenance_edge(
+        researcher_a=req.researcher_a,
+        researcher_b=req.researcher_b,
+        basis_document_id=req.basis_document_id,
+        basis_type=req.basis_type
+    )
+    
+    if success:
+        return {"status": "success", "message": f"Provenance edge added between {req.researcher_a} and {req.researcher_b}."}
+    else:
+        return {"status": "error", "message": "Failed to add edge. Missing or invalid provenance basis."}
