@@ -1,88 +1,108 @@
-import React, { useState, useEffect } from 'react';
-import { AuthenticatedLayout, useAppRouter } from '../components/shared';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
+import { Button, PublicOrAuthenticatedLayout, useAppRouter } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { apiErrorMessage, downloadThesis, getThesis } from '../lib/api';
 
 const Screen11PdfReader = () => {
-  const { navigate } = useAppRouter();
-  const [thesis, setThesis] = useState<any>(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const searchId = new URLSearchParams(window.location.search).get('thesisId');
-  const pathId = window.location.pathname.split('/').pop();
-  const id = pathId !== 'reader' ? pathId : searchId;
+  const { currentScreen, navigate } = useAppRouter();
+  const thesisId = Number(currentScreen.params?.thesisId || currentScreen.params?.id);
+  const hasThesisId = Number.isSafeInteger(thesisId) && thesisId > 0;
+  const { data: thesis, loading: thesisLoading, error: thesisError, refetch } = useApi(
+    hasThesisId ? () => getThesis(thesisId) : null,
+    [thesisId],
+    hasThesisId,
+  );
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(hasThesisId);
+  const [pdfError, setPdfError] = useState<unknown>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const token = localStorage.getItem('access') || localStorage.getItem('token');
-        const headers: any = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (!hasThesisId) return undefined;
 
-        // 1. Get Thesis Details
-        const res = await fetch(`http://localhost:8000/api/theses/${id}/`, { headers });
-        if (!res.ok) throw new Error('Failed to load thesis details.');
-        const data = await res.json();
-        setThesis(data);
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setPdfUrl(null);
+    setPdfLoading(true);
+    setPdfError(null);
 
-        // 2. If there is a PDF, fetch it as a Blob using the token
-        if (data.file_url) {
-          const pdfRes = await fetch(`http://localhost:8000${data.file_url}`, { headers });
-          if (!pdfRes.ok) throw new Error('Failed to load PDF file.');
-          
-          const blob = await pdfRes.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          setPdfBlobUrl(objectUrl);
+    downloadThesis(thesisId)
+      .then((blob) => {
+        if (!blob.size) throw new Error('The thesis PDF is empty.');
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+        const nextUrl = URL.createObjectURL(pdfBlob);
+        if (cancelled) {
+          URL.revokeObjectURL(nextUrl);
+          return;
         }
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+        objectUrl = nextUrl;
+        setPdfUrl(nextUrl);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setPdfError(error);
+      })
+      .finally(() => {
+        if (!cancelled) setPdfLoading(false);
+      });
 
-    if (id) fetchData();
-
-    // Cleanup blob URL when component unmounts
     return () => {
-      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [id]);
+  }, [hasThesisId, thesisId, retryVersion]);
 
-  if (loading) return <AuthenticatedLayout title="Loading..."><div className="p-8 text-center">Loading PDF securely...</div></AuthenticatedLayout>;
-  if (error) return <AuthenticatedLayout title="Error"><div className="p-8 text-center text-red-600">{error}</div></AuthenticatedLayout>;
-  if (!thesis) return <AuthenticatedLayout title="Not Found"><div className="p-8 text-center">Thesis not found.</div></AuthenticatedLayout>;
-
-  if (!pdfBlobUrl) {
+  if (!hasThesisId) {
     return (
-      <AuthenticatedLayout title="PDF Reader">
-        <div className="flex flex-col items-center justify-center p-12 text-center border border-yellow-200 bg-yellow-50 rounded-lg max-w-2xl mx-auto mt-10">
-          <div className="text-4xl mb-4">??</div>
-          <h3 className="text-xl font-bold text-yellow-900 mb-2">No PDF Available</h3>
-          <p className="text-yellow-700">This thesis record does not currently contain a downloadable PDF file.</p>
-        </div>
-      </AuthenticatedLayout>
+      <PublicOrAuthenticatedLayout title="PDF Reader">
+        <EmptyState title="No thesis selected" description="Open a thesis from the repository to read its PDF." />
+      </PublicOrAuthenticatedLayout>
     );
   }
 
+  const title = thesis?.title || 'Thesis PDF';
+  const retryPdf = () => setRetryVersion((version) => version + 1);
+
   return (
-    <AuthenticatedLayout title={`Reading: ${thesis.title}`}>
-      <div className="h-[85vh] w-full bg-gray-100 rounded-lg overflow-hidden border border-gray-300">
-        <iframe 
-          src={pdfBlobUrl} 
-          className="w-full h-full"
-          title="Thesis PDF Viewer"
-        />
+    <PublicOrAuthenticatedLayout title="PDF Reader">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <Button variant="ghost" className="mb-2" onClick={() => navigate('thesis-detail', { thesisId })}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Thesis details
+            </Button>
+            <h2 className="truncate text-lg font-semibold text-slate-900">{title}</h2>
+            {thesis?.author && <p className="mt-1 text-sm text-slate-500">{thesis.author}</p>}
+          </div>
+          {pdfUrl && (
+            <Button variant="secondary" onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}>
+              <ExternalLink className="mr-2 h-4 w-4" /> Open in new tab
+            </Button>
+          )}
+        </div>
+
+        {thesisError && !pdfUrl && !pdfError && (
+          <ErrorState message={apiErrorMessage(thesisError, 'Unable to load this thesis.')} onRetry={() => void refetch()} />
+        )}
+        {pdfError && (
+          <ErrorState
+            message={apiErrorMessage(pdfError, 'Unable to load this PDF. Check that you have access and the thesis includes a PDF.')}
+            onRetry={retryPdf}
+          />
+        )}
+        {!pdfError && (pdfLoading || (thesisLoading && !thesis)) && <LoadingState label="Loading thesis PDF…" />}
+        {!pdfLoading && !pdfError && pdfUrl && (
+          <div className="overflow-hidden rounded-md border border-slate-300 bg-slate-200">
+            <iframe
+              title={`PDF reader: ${title}`}
+              src={pdfUrl}
+              className="block h-[calc(100vh-13rem)] min-h-[420px] w-full"
+            />
+          </div>
+        )}
       </div>
-      <div className="mt-4 flex gap-4">
-        <button onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
-          ? Back to Thesis
-        </button>
-        <a href={pdfBlobUrl} download={`${thesis.title}.pdf`} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-          Download PDF
-        </a>
-      </div>
-    </AuthenticatedLayout>
+    </PublicOrAuthenticatedLayout>
   );
 };
 
