@@ -18,14 +18,14 @@ import {
   ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
 } from '../components/shared';
 import { useApi } from '../hooks/useApi';
-import { searchTheses } from '../lib/api';
+import { listTheses, toArray } from '../lib/api';
 import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
 
 const Screen05Discover = () => {
   const { navigate } = useAppRouter();
   const [query, setQuery] = useState('');
-  const { data, loading, error, refetch } = useApi(() => searchTheses(), [], true);
-  const recent = data?.results.slice(0, 3).map((result) => result.thesis) || [];
+  const { data, loading, error, refetch } = useApi(() => listTheses(), [], true);
+  const theses = toArray(data);
   return (
     <PublicOrAuthenticatedLayout title="Discover Research">
       <div className="max-w-5xl mx-auto space-y-10">
@@ -73,12 +73,12 @@ const Screen05Discover = () => {
 
         {/* Recent */}
         <div>
-          <h3 className="text-xl font-semibold text-slate-800 mb-6">Recently Added</h3>
+          <h3 className="text-xl font-semibold text-slate-800 mb-6">Public Theses</h3>
           {loading && <LoadingState label="Loading recent research…" />}
           {error && <ErrorState onRetry={() => void refetch()} />}
-          {!loading && !error && recent.length === 0 && <EmptyState title="No published research yet" description="Published public theses will appear here when the repository has records." />}
-          {!loading && !error && recent.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recent.map((thesis) => (
+          {!loading && !error && theses.length === 0 && <EmptyState title="No published research yet" description="Published public theses will appear here when the repository has records." />}
+          {!loading && !error && theses.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {theses.map((thesis) => (
               <ThesisCard key={thesis.id} thesis={thesis} onClick={() => navigate('thesis-detail', { thesisId: thesis.id })} />
             ))}
           </div>}
