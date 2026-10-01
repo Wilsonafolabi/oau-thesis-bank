@@ -340,3 +340,98 @@ async def add_network_edge(req: AddEdgeRequest):
         return {"status": "success", "message": f"Provenance edge added between {req.researcher_a} and {req.researcher_b}."}
     else:
         return {"status": "error", "message": "Failed to add edge. Missing or invalid provenance basis."}
+
+# ==========================================
+# NEW AI INTELLIGENCE ENDPOINTS (Sections 7.7, 7.8, 7.10)
+# ==========================================
+from pydantic import BaseModel
+import numpy as np
+from research_intelligence.gap_engine import GapEngine
+from proposal_checker.service import ProposalChecker
+from research_network.graph import ResearchNetworkGraph
+
+# Initialize engines (Singleton pattern for the app lifecycle)
+gap_engine = GapEngine()
+network_graph = ResearchNetworkGraph()
+
+# Mock embedding service for the API endpoint (Replace with your actual embeddings.service import in production)
+class MockEmbeddingService:
+    def embed_text(self, text: str):
+        # Returns a dummy 384-dim vector for demonstration (all-MiniLM-L6-v2 dimension)
+        return np.random.rand(384).astype(np.float32)
+
+proposal_checker = ProposalChecker(embedding_service=MockEmbeddingService())
+
+class ProposalCheckRequest(BaseModel):
+    proposal_text: str
+    threshold: float = 0.85
+
+class AddEdgeRequest(BaseModel):
+    researcher_a: str
+    researcher_b: str
+    basis_document_id: str
+    basis_type: str = "co_authorship"
+
+@app.get("/api/ai/detect-gaps")
+async def detect_gaps():
+    """
+    Section 7.7 & 7.10: Triggers unsupervised research-gap detection using BERTopic.
+    Uses synthetic data per Section 7.3 until real corpus is loaded.
+    """
+    mock_texts = [
+        "Machine learning applications in African agricultural systems.",
+        "Deep learning for medical imaging in resource-constrained settings.",
+        "Machine learning applications in African agricultural systems." # Duplicate to force a low-count topic
+    ]
+    mock_ids = ["thesis_1", "thesis_2", "thesis_3"]
+    
+    gaps = gap_engine.detect_gaps(thesis_texts=mock_texts, thesis_ids=mock_ids)
+    return {"status": "success", "gaps_detected": len(gaps), "gaps": gaps}
+
+@app.post("/api/ai/check-proposal")
+async def check_proposal(req: ProposalCheckRequest):
+    """
+    Section 7.10: Semantic similarity/plagiarism review engine.
+    Checks new proposal text against existing corpus chunks.
+    """
+    # Mock corpus chunks (Replace with actual DB/Vector DB fetch in production)
+    mock_chunks = [
+        {
+            "thesis_id": "thesis_1", 
+            "id": "chunk_1", 
+            "vector": np.random.rand(384).astype(np.float32), 
+            "text": "This is a sample existing thesis text about machine learning in agriculture...", 
+            "page": 12
+        }
+    ]
+    
+    flagged = proposal_checker.check_similarity(
+        new_proposal_text=req.proposal_text, 
+        existing_thesis_chunks=mock_chunks, 
+        threshold=req.threshold
+    )
+    
+    return {
+        "status": "success", 
+        "threshold_used": req.threshold,
+        "flagged_chunks_count": len(flagged),
+        "flagged_chunks": flagged
+    }
+
+@app.post("/api/ai/network/add-edge")
+async def add_network_edge(req: AddEdgeRequest):
+    """
+    Section 7.8: Adds a provenance-required collaboration edge.
+    Rejects the request if no basis_document_id is provided.
+    """
+    success = network_graph.add_provenance_edge(
+        researcher_a=req.researcher_a,
+        researcher_b=req.researcher_b,
+        basis_document_id=req.basis_document_id,
+        basis_type=req.basis_type
+    )
+    
+    if success:
+        return {"status": "success", "message": f"Provenance edge added between {req.researcher_a} and {req.researcher_b}."}
+    else:
+        return {"status": "error", "message": "Failed to add edge. Missing or invalid provenance basis."}
