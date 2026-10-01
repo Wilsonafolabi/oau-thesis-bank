@@ -1,4 +1,6 @@
 from recommendation.service import RecommendationService
+from security.guardrails import guardrails, limiter
+from fastapi import HTTPException
 import os
 import json
 import hashlib
@@ -161,7 +163,13 @@ class InteractionRequest(BaseModel):
     event_type: str  # Must be 'view', 'download', or 'save'
 
 @app.post("/api/ai/interact")
-async def log_interaction(req: InteractionRequest):
+@limiter.limit("50/minute") # Section 7.9: Prevent API abuse
+async def log_interaction(request: Request, req: InteractionRequest):
+    # Section 7.9: Sanitize input before processing
+    clean_user_id, is_safe = guardrails.sanitize_input(req.user_id)
+    if not is_safe:
+        raise HTTPException(status_code=400, detail="Invalid input detected")
+
     """
     Section 7.8: Logs user interactions to build the dataset for the learned model.
     Call this from the frontend whenever a user views, downloads, or saves a thesis.
@@ -214,7 +222,13 @@ class InteractionRequest(BaseModel):
     event_type: str  # Must be 'view', 'download', or 'save'
 
 @app.post("/api/ai/interact")
-async def log_interaction(req: InteractionRequest):
+@limiter.limit("50/minute") # Section 7.9: Prevent API abuse
+async def log_interaction(request: Request, req: InteractionRequest):
+    # Section 7.9: Sanitize input before processing
+    clean_user_id, is_safe = guardrails.sanitize_input(req.user_id)
+    if not is_safe:
+        raise HTTPException(status_code=400, detail="Invalid input detected")
+
     """
     Section 7.8: Logs user interactions to build the dataset for the learned model.
     Call this from the frontend whenever a user views, downloads, or saves a thesis.
@@ -435,3 +449,4 @@ async def add_network_edge(req: AddEdgeRequest):
         return {"status": "success", "message": f"Provenance edge added between {req.researcher_a} and {req.researcher_b}."}
     else:
         return {"status": "error", "message": "Failed to add edge. Missing or invalid provenance basis."}
+
