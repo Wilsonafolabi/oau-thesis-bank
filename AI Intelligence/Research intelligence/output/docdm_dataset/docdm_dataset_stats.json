@@ -1,0 +1,23 @@
+{
+  "examples_per_label": {
+    "supported": 5,
+    "contradicted": 5,
+    "not_mentioned": 2
+  },
+  "documents_per_split": {
+    "train": 1,
+    "val": 1,
+    "test": 1
+  },
+  "examples_per_document": {
+    "thesis_002": 5,
+    "thesis_001": 5,
+    "thesis_003": 2
+  },
+  "average_passage_length": 142.83333333333334,
+  "average_claim_length": 117.58333333333333,
+  "validation_rejection_rate": 0.0,
+  "generator_failure_rate": 0.0,
+  "judge_failure_rate": 0.0,
+  "duplicate_rate": 0.0
+}

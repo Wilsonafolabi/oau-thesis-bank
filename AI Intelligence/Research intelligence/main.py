@@ -1,3 +1,4 @@
+from fastapi import HTTPException, Request
 from recommendation.service import RecommendationService
 from security.guardrails import guardrails, limiter
 from fastapi import HTTPException
@@ -265,7 +266,7 @@ async def train_recommendation_model():
 # ==========================================
 from pydantic import BaseModel
 import numpy as np
-from research_intelligence.gap_engine import GapEngine
+from research_intelligence.gap_engine.service import GapEngine
 from proposal_checker.service import ProposalChecker
 from research_network.graph import ResearchNetworkGraph
 
@@ -300,10 +301,11 @@ async def detect_gaps():
     mock_texts = [
         "Machine learning applications in African agricultural systems.",
         "Deep learning for medical imaging in resource-constrained settings.",
-        "Machine learning applications in African agricultural systems." # Duplicate to force a low-count topic
+        "Machine learning applications in African agricultural systems."
     ]
     mock_ids = ["thesis_1", "thesis_2", "thesis_3"]
     
+    # Call with both arguments now that GapEngine supports it
     gaps = gap_engine.detect_gaps(thesis_texts=mock_texts, thesis_ids=mock_ids)
     return {"status": "success", "gaps_detected": len(gaps), "gaps": gaps}
 
@@ -360,7 +362,7 @@ async def add_network_edge(req: AddEdgeRequest):
 # ==========================================
 from pydantic import BaseModel
 import numpy as np
-from research_intelligence.gap_engine import GapEngine
+from research_intelligence.gap_engine.service import GapEngine
 from proposal_checker.service import ProposalChecker
 from research_network.graph import ResearchNetworkGraph
 
@@ -395,10 +397,11 @@ async def detect_gaps():
     mock_texts = [
         "Machine learning applications in African agricultural systems.",
         "Deep learning for medical imaging in resource-constrained settings.",
-        "Machine learning applications in African agricultural systems." # Duplicate to force a low-count topic
+        "Machine learning applications in African agricultural systems."
     ]
     mock_ids = ["thesis_1", "thesis_2", "thesis_3"]
     
+    # Call with both arguments now that GapEngine supports it
     gaps = gap_engine.detect_gaps(thesis_texts=mock_texts, thesis_ids=mock_ids)
     return {"status": "success", "gaps_detected": len(gaps), "gaps": gaps}
 
@@ -450,3 +453,64 @@ async def add_network_edge(req: AddEdgeRequest):
     else:
         return {"status": "error", "message": "Failed to add edge. Missing or invalid provenance basis."}
 
+
+
+
+
+@app.post("/api/ai/summarize")
+async def summarize_thesis(thesis_id: int):
+    """
+    Generates an AI summary for a specific thesis using Laya/RAG.
+    """
+    try:
+        # Try to fetch thesis from Django backend
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://localhost:8000/api/theses/{thesis_id}/")
+            if response.status_code == 200:
+                thesis_data = response.json()
+                title = thesis_data.get("title", "Unknown Thesis")
+                abstract = thesis_data.get("abstract", "")
+                
+                # Use Laya to generate summary
+                prompt = f"Provide a comprehensive academic summary of this thesis titled '{title}'. Abstract: {abstract}. Include key methodologies, findings, and contributions."
+                
+                # Call Laya through the router
+                from laya.router import LayaRouter
+                router = LayaRouter()
+                result = await router.generate(prompt, max_tokens=500)
+                
+                return {
+                    "thesis_id": thesis_id,
+                    "summary": result.get("answer", "Summary generation failed."),
+                    "status": "success"
+                }
+            else:
+                # Fallback if Django is not running
+                return {
+                    "thesis_id": thesis_id,
+                    "summary": f"Thesis #{thesis_id} analysis: This research contributes to its field through systematic investigation and analysis. For detailed summary, ensure the Django backend is running on port 8000.",
+                    "status": "partial"
+                }
+    except Exception as e:
+        logger.error(f"Summarization error: {e}")
+        return {
+            "thesis_id": thesis_id,
+            "summary": f"Error generating summary: {str(e)}",
+            "status": "error"
+        }
+
+
+
+
+
+from document_processing.service import DocumentIntelligenceService
+doc_service = DocumentIntelligenceService()
+
+@app.post('/api/ai/ingest-document')
+async def ingest_document(pdf_path: str, title: str):
+    try:
+        result = doc_service.process_pdf(pdf_path, {'title': title})
+        return {'status': 'success', 'chunks_generated': len(result['chunks']), 'document_id': result['document'].id}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}

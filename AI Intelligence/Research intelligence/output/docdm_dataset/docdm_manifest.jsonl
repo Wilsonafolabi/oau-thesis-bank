@@ -1,0 +1,1 @@
+{"total_documents": 3, "train_documents": 1, "val_documents": 1, "test_documents": 1, "total_examples": 12, "gen_model": "patataaliena/qwen2.5-vl-7b-instruct", "judge_model": "patataaliena/qwen2.5-vl-7b-instruct"}

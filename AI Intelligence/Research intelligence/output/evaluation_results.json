@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-10-09T17:46:03.436423+00:00",
+  "n": 2,
+  "accuracy": 1.0,
+  "macro_f1": 0.6666666666666666,
+  "per_label": {
+    "supported": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    "contradicted": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    "not_mentioned": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0
+    }
+  }
+}
