@@ -1,58 +1,47 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout } from '../components/shared';
+import { askResearchQuestion } from '../services/aiService';
+
+type Message = { role: 'user' | 'ai'; content: string };
 
 const Screen27AIAssistant = () => {
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    const question = input.trim();
+    if (!question || loading) return;
+    setInput('');
+    setMessages((prev) => [...prev, { role: 'user', content: question }]);
     setLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content: input }]);
-
     try {
-      const response = await fetch('http://localhost:8000/api/ai/rag-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: input })
-      });
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'ai', content: data.answer || JSON.stringify(data) }]);
+      const data = await askResearchQuestion(question);
+      setMessages((prev) => [...prev, { role: 'ai', content: data.answer || data.message || 'No answer returned.' }]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'ai', content: 'Error connecting to AI.' }]);
+      setMessages((prev) => [...prev, { role: 'ai', content: error instanceof Error ? error.message : 'AI request failed.' }]);
     } finally {
       setLoading(false);
-      setInput('');
     }
   };
 
   return (
     <AuthenticatedLayout title="AI Research Assistant">
-      <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-        <div style={{ height: '400px', overflowY: 'auto', border: '1px solid #ccc', padding: '10px', marginBottom: '10px', borderRadius: '8px', background: '#f9f9f9' }}>
-          {messages.map((msg, i) => (
-            <div key={i} style={{ marginBottom: '10px', textAlign: msg.role === 'user' ? 'right' : 'left' }}>
-              <strong>{msg.role === 'user' ? 'You: ' : 'AI: '}</strong>
-              <div style={{ display: 'inline-block', padding: '8px 12px', borderRadius: '8px', background: msg.role === 'user' ? '#007bff' : '#e9ecef', color: msg.role === 'user' ? 'white' : 'black', whiteSpace: 'pre-wrap', maxWidth: '80%' }}>
-                {msg.content}
+      <div className="mx-auto flex h-[600px] max-w-4xl flex-col">
+        <div className="flex-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-5">
+          {messages.length === 0 && <p className="text-sm text-slate-500">Ask a question about the indexed OAU research corpus.</p>}
+          {messages.map((message, index) => (
+            <div key={index} className={`mb-4 ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
+              <div className={`inline-block max-w-[85%] rounded-lg px-4 py-3 text-sm ${message.role === 'user' ? 'bg-[#00502F] text-white' : 'border border-slate-200 bg-white text-slate-800'}`}>
+                <div className="whitespace-pre-wrap">{message.content}</div>
               </div>
             </div>
           ))}
-          {loading && <div style={{ fontStyle: 'italic', color: '#666' }}>AI is thinking...</div>}
+          {loading && <p className="text-sm italic text-slate-500">AI is retrieving evidence…</p>}
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ask a research question..."
-            style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <button onClick={handleSend} disabled={loading} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', background: '#007bff', color: 'white', cursor: 'pointer' }}>
-            Send
-          </button>
+        <div className="mt-3 flex gap-2">
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void handleSend(); }} className="flex-1 rounded-md border border-slate-300 p-3" placeholder="Ask a research question…" />
+          <button onClick={() => void handleSend()} disabled={loading || !input.trim()} className="rounded-md bg-[#00502F] px-5 py-3 font-semibold text-white disabled:opacity-50">Send</button>
         </div>
       </div>
     </AuthenticatedLayout>

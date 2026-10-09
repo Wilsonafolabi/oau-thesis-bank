@@ -90,8 +90,8 @@ const ScreenIndex = () => {
           <div className="mt-8 p-4 bg-emerald-50 border border-emerald-200 rounded-md flex items-start">
             <CheckCircle className="w-5 h-5 text-emerald-600 mr-3 mt-0.5" />
             <div>
-              <h3 className="text-emerald-800 font-medium">Verification Passed</h3>
-              <p className="text-emerald-700 text-sm mt-1">46 primary screens registered and accessible.</p>
+              <h3 className="text-emerald-800 font-medium">Screen Registry</h3>
+              <p className="text-emerald-700 text-sm mt-1">46 primary routes are registered. Backend connectivity is verified when each route is opened.</p>
             </div>
           </div>
         </div>

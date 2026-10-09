@@ -1,71 +1,59 @@
 import React, { useState } from 'react';
-import { AuthenticatedLayout } from '../components/shared';
+import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
+import { checkSimilarity, type SimilarityReport } from '../services/aiService';
 
 const Screen22IdeaChecker = () => {
-  const [file, setFile] = useState(null);
-  const [result, setResult] = useState(null);
+  const { navigate } = useAppRouter();
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<SimilarityReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleCheck = async () => {
     if (!file) return;
     setLoading(true);
+    setError('');
     setResult(null);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('http://localhost:8000/api/ai/check-similarity', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      setResult(data);
-    } catch (e) { 
-      setResult({ status: 'error', message: 'Error connecting to backend.' }); 
+      const report = await checkSimilarity(file);
+      sessionStorage.setItem('oau:lastSimilarityReport', JSON.stringify(report));
+      setResult(report);
+      navigate('idea-similarity');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Similarity check failed.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <AuthenticatedLayout title="Research Idea Checker">
-      <div className="p-6 max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-2 text-slate-900">Check Document Similarity</h2>
-        <p className="mb-6 text-slate-600">Upload a research proposal or thesis draft to check its similarity against existing work.</p>
-        
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6">
-          <input 
-            type="file" 
-            accept=".pdf,.txt,.doc,.docx"
-            onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)} 
-            className="w-full p-3 border border-slate-300 rounded-md mb-4 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500" 
+      <div className="mx-auto max-w-3xl space-y-6">
+        <Card className="p-6">
+          <h2 className="text-2xl font-bold text-slate-900">Check Research Similarity</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Upload a PDF. The AI service compares it with indexed thesis chunks and returns evidence.
+          </p>
+          <input
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+            className="mt-5 block w-full rounded-md border border-slate-300 p-3 text-sm"
           />
-          
-          <button 
-            onClick={handleCheck} 
-            disabled={loading || !file} 
-            className="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-          >
-            {loading ? 'Analyzing Document...' : 'Check Similarity'}
-          </button>
-        </div>
-        
+          <Button className="mt-4" disabled={!file || loading} onClick={() => void handleCheck()}>
+            {loading ? 'Analyzing…' : 'Check Similarity'}
+          </Button>
+        </Card>
+        {error && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700">{error}</p>}
         {result && (
-          <div className={`p-6 rounded-lg border ${result.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-start gap-4">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${result.status === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                {result.status === 'success' ? '?' : '?'}
-              </div>
-              <div className="flex-1">
-                <h3 className={`text-lg font-bold mb-1 ${result.status === 'success' ? 'text-green-900' : 'text-red-900'}`}>
-                  {result.status === 'success' ? 'Analysis Complete' : 'Analysis Failed'}
-                </h3>
-                <p className={`text-sm mb-3 ${result.status === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-                  {file ? `File analyzed: ${file.name}` : ''}
-                </p>
-                <p className="text-slate-700 text-sm whitespace-pre-wrap">{result.message || JSON.stringify(result)}</p>
-              </div>
-            </div>
-          </div>
+          <Card className="p-6">
+            <p className="font-semibold text-slate-900">
+              {result.flagged_chunks_count || 0} potentially similar chunks found
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              {result.chunks_scanned || 0} chunks scanned at threshold {result.threshold_used}
+            </p>
+          </Card>
         )}
       </div>
     </AuthenticatedLayout>

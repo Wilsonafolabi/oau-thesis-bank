@@ -1,15 +1,18 @@
 import React from 'react';
-import { AuthenticatedLayout } from '../components/shared';
+import { AuthenticatedLayout, Card } from '../components/shared';
 
-const Screen12ThesisDiscussion = () => (
+const Screen12 = () => (
   <AuthenticatedLayout title="Thesis Discussion">
-    <div className="flex flex-col items-center justify-center p-12 text-center border border-slate-200 bg-slate-50 rounded-lg max-w-2xl mx-auto mt-10">
-      <div className="text-4xl mb-4">??</div>
-      <h3 className="text-xl font-bold text-slate-900 mb-2">Thesis Discussion</h3>
-      <p className="text-slate-600 mb-4">Comment section and Q&A for specific theses.</p>
-      <span className="px-3 py-1 text-xs font-medium text-blue-800 bg-blue-100 rounded-full">Awaiting Backend Integration</span>
+    <div className="mx-auto max-w-2xl">
+      <Card className="p-8">
+        <h2 className="text-xl font-bold text-slate-900">Thesis Discussion</h2>
+        <p className="mt-2 leading-6 text-slate-600">Comments and thesis-specific Q&A require the Phase 2 discussion API.</p>
+        <p className="mt-4 text-sm text-slate-500">
+          This screen is intentionally not fabricating records. The uploaded archive did not include the Phase 2 service that owns this data.
+        </p>
+      </Card>
     </div>
   </AuthenticatedLayout>
 );
 
-export default Screen12ThesisDiscussion;
+export default Screen12;
