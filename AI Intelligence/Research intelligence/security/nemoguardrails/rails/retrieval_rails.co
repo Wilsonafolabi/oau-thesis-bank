@@ -1,0 +1,15 @@
+define bot respond no evidence
+  "I cannot find sufficient evidence in the thesis bank to answer that question."
+
+define bot respond untrusted content
+  "The retrieved document contained embedded instructions, which I ignore. I cannot answer from that source."
+
+define flow retrieval rails
+  $malicious = execute scan_retrieved_content
+  if $malicious
+    bot respond untrusted content
+    stop
+  $has_evidence = execute require_evidence
+  if not $has_evidence
+    bot respond no evidence
+    stop

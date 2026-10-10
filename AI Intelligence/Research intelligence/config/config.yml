@@ -1,7 +1,0 @@
-﻿# Core configuration for NeMo Guardrails
-models:
-  - type: main
-    engine: openai
-    model: groq/llama3-70b-8192
-    parameters:
-      temperature: 0.1
