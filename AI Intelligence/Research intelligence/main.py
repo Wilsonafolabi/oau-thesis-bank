@@ -514,3 +514,33 @@ async def ingest_document(pdf_path: str, title: str):
         return {'status': 'success', 'chunks_generated': len(result['chunks']), 'document_id': result['document'].id}
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
+
+
+# --- NeMo Guardrails enforcement wiring (Phase 3 security, mandatory) ---
+from security.guardrails_service import install_guardrails_middleware
+
+install_guardrails_middleware(app)
+
+# --- NeMo Guardrails Integration (Phase 3) ---
+from security.nemoguardrails import get_runtime
+from security.nemoguardrails.schemas import GuardrailsRequest, EvidenceReference
+import uuid
+
+@app.post("/api/v1/ai/nemo-query")
+async def nemo_query(payload: dict):
+    runtime = get_runtime()
+    request_id = str(uuid.uuid4())
+    
+    # Mock retrieval for now (would come from RAG pipeline)
+    evidence = []
+    if "context" in payload:
+        evidence = [EvidenceReference(document_id="doc_1", chunk_id="c1", text=payload["context"])]
+        
+    req = GuardrailsRequest(
+        request_id=request_id,
+        user_input=payload.get("question", ""),
+        evidence=evidence
+    )
+    
+    resp = await runtime.run(req)
+    return resp.model_dump()

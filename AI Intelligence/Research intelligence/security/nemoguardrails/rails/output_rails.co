@@ -1,0 +1,15 @@
+define bot respond citation unsupported
+  "I cannot provide that answer because its citations do not match the retrieved sources."
+
+define bot respond output unsafe
+  "I cannot provide that response."
+
+define flow output rails
+  $safe = execute check_output_safety
+  if not $safe
+    bot respond output unsafe
+    stop
+  $citations_ok = execute check_citations
+  if not $citations_ok
+    bot respond citation unsupported
+    stop
