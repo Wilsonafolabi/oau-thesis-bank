@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { getRecommendations, detectGaps, logInteraction, Recommendation, ResearchGap } from '../services/aiService';
 
 const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
@@ -91,7 +91,7 @@ const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
                   className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-gray-600 transition cursor-pointer"
                   onClick={() => handleViewThesis(rec.thesis_id)}>
                 <span className="font-medium text-gray-800 dark:text-gray-200 truncate flex-1 mr-2">
-                  {rec.thesis_id.replace('_', ' ').toUpperCase()}
+                  {rec.thesis_id?.replace('_', ' ').toUpperCase()}
                 </span>
                 <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${
                   rec.source === 'learned_model' 

@@ -208,3 +208,39 @@ export interface ApiErrorPayload {
   detail?: string;
   [key: string]: unknown;
 }
+
+// ==========================================
+// Phase 3 Integration Types
+// ==========================================
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface JobResponse {
+  job_id: string;
+  status: JobStatus;
+  message: string;
+  result?: Record<string, unknown> | null;
+}
+
+export interface RagAskRequest {
+  question: string;
+}
+
+export interface RagAskResponse {
+  answer: string;
+  citations: string[];
+  decision_engine: string;
+  confidence: number;
+  request_id: string;
+}
+
+export interface ResearcherProfilePhase3 {
+  id: string;
+  name: string;
+  department: string;
+}
+
+export interface EvaluationStatus {
+  last_run: string;
+  deterministic_pass_rate: string;
+  live_evals_status: string;
+}

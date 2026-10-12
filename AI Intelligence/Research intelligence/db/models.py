@@ -1,6 +1,6 @@
-import uuid
+﻿import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Enum as SAEnum, Boolean
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Enum as SAEnum, Boolean, JSON
 from sqlalchemy.orm import declarative_base
 from pgvector.sqlalchemy import Vector
 import enum
@@ -24,6 +24,7 @@ class AIDocument(Base):
     file_hash = Column(String)
     access_level = Column(String, default="private")
     embedding_status = Column(String, default="pending") # 'pending', 'processing', 'completed', 'failed'
+    thesis_metadata = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class AIJob(Base):
@@ -53,3 +54,4 @@ class AIChunk(Base):
     embedding_model = Column(String) # Track which model generated this embedding
     embedding_version = Column(String) # Track model version for invalidation
     vector = Column(Vector(1024)) # pgvector column for 1024-dim embeddings
+

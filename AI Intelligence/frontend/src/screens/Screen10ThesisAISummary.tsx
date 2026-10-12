@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { AuthenticatedLayout, useAppRouter } from '../components/shared';
 
 const Screen10ThesisAISummary = () => {
@@ -52,7 +52,7 @@ const Screen10ThesisAISummary = () => {
   }
 
   return (
-    <AuthenticatedLayout title={AI Summary: }>
+    <AuthenticatedLayout title="AI Summary">
       <div className="max-w-4xl mx-auto p-6">
         <button 
           onClick={() => navigate('thesis-detail', { thesisId: thesis.id })}

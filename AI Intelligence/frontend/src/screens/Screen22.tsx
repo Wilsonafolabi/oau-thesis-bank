@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
 import { checkSimilarity, type SimilarityReport } from '../services/aiService';
 
@@ -41,7 +41,7 @@ const Screen22IdeaChecker = () => {
             className="mt-5 block w-full rounded-md border border-slate-300 p-3 text-sm"
           />
           <Button className="mt-4" disabled={!file || loading} onClick={() => void handleCheck()}>
-            {loading ? 'Analyzing…' : 'Check Similarity'}
+            {loading ? 'Analyzingâ€¦' : 'Check Similarity'}
           </Button>
         </Card>
         {error && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700">{error}</p>}
@@ -61,3 +61,4 @@ const Screen22IdeaChecker = () => {
 };
 
 export default Screen22IdeaChecker;
+
