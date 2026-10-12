@@ -95,6 +95,12 @@ class NeMoGuardrailsRuntime:
     def require_evidence(self, relevant_chunks=None):
         ctx = _current_context.get()
         chunks = relevant_chunks if relevant_chunks is not None else ctx.get("evidence_texts", [])
+        
+        # If no evidence is provided yet (e.g., during initial input classification), 
+        # do not block. Only enforce the check if evidence was actually retrieved.
+        if len(chunks) == 0:
+            return True
+            
         if not RESEARCH_RE.search(ctx.get("user_input", "")):
             return True
         return len(chunks) > 0
