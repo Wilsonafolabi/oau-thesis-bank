@@ -1,15 +1,18 @@
 import React from 'react';
-import { AuthenticatedLayout } from '../components/shared';
+import { AuthenticatedLayout, Card } from '../components/shared';
 
-const Screen13ResearchLineage = () => (
+const Screen13 = () => (
   <AuthenticatedLayout title="Research Lineage">
-    <div className="flex flex-col items-center justify-center p-12 text-center border border-slate-200 bg-slate-50 rounded-lg max-w-2xl mx-auto mt-10">
-      <div className="text-4xl mb-4">??</div>
-      <h3 className="text-xl font-bold text-slate-900 mb-2">Research Lineage</h3>
-      <p className="text-slate-600 mb-4">Visualize how one thesis builds upon previous work.</p>
-      <span className="px-3 py-1 text-xs font-medium text-blue-800 bg-blue-100 rounded-full">Awaiting Backend Integration</span>
+    <div className="mx-auto max-w-2xl">
+      <Card className="p-8">
+        <h2 className="text-xl font-bold text-slate-900">Research Lineage</h2>
+        <p className="mt-2 leading-6 text-slate-600">Lineage visualization requires citation/metadata records from the Phase 2 thesis API or AI network endpoint.</p>
+        <p className="mt-4 text-sm text-slate-500">
+          This screen is intentionally not fabricating records. The uploaded archive did not include the Phase 2 service that owns this data.
+        </p>
+      </Card>
     </div>
   </AuthenticatedLayout>
 );
 
-export default Screen13ResearchLineage;
+export default Screen13;

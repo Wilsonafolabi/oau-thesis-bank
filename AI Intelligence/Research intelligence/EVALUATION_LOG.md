@@ -14,3 +14,9 @@ No fabricated scores are recorded.
 4. ~20 human spot checks for research-gap clusters.
 5. Human-reviewed similarity pairs for precision/recall/F1 and threshold calibration.
 6. End-to-end RAG grounding and prompt-injection tests.
+
+- 2026-10-09T17:46:03.436423+00:00 | verifier=LLM | n=2 | acc=1.000 | macro_f1=0.667
+## Run: 2026-10-11 17:14:33
+- **Suite:** Deterministic (Pytest)
+- **Result:** PASSED (See EVALUATION_REPORT.md for details)
+- **Live Tests:** SKIPPED (No API keys configured)

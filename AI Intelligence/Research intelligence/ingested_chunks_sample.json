@@ -1,0 +1,23 @@
+﻿[
+  {
+    "document_id": "thesis_001",
+    "chunk_id": "c1",
+    "source_file": "fraud_detection.pdf",
+    "page_number": 1,
+    "text": "Machine learning models achieve 95% accuracy in fraud detection. However, they require large amounts of labeled data to train effectively."
+  },
+  {
+    "document_id": "thesis_002",
+    "chunk_id": "c2",
+    "source_file": "nlp_yoruba.pdf",
+    "page_number": 1,
+    "text": "Natural language processing for the Yoruba language shows significant improvement when utilizing BERT fine-tuning techniques on localized corpora."
+  },
+  {
+    "document_id": "thesis_003",
+    "chunk_id": "c3",
+    "source_file": "blockchain_supply.pdf",
+    "page_number": 1,
+    "text": "The integration of blockchain technology into supply chain management offers unprecedented transparency and traceability for agricultural products."
+  }
+]

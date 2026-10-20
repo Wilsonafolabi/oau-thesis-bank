@@ -1,0 +1,5 @@
+﻿with open("security/nemoguardrails/runtime.py", "r", encoding="utf-8") as f: text = f.read()
+text = text.replace("import contextvars", "import contextvars\nimport traceback")
+text = text.replace('logger.error("nemoguardrails_execution_failed", error=type(exc).__name__,', 'print("\\n=== FULL TRACEBACK ===\\n" + traceback.format_exc() + "\\n=== END TRACEBACK ===\\n")\n                    logger.error("nemoguardrails_execution_failed", error=type(exc).__name__,')
+with open("security/nemoguardrails/runtime.py", "w", encoding="utf-8") as f: f.write(text)
+print("✅ Patched runtime to print full tracebacks.")

@@ -1,0 +1,16 @@
+define bot refuse unsafe
+  "That request is not allowed."
+
+define flow input rails
+  $unsafe = execute check_input_safety
+  if $unsafe
+    bot refuse unsafe
+    stop
+  $injection = execute check_injection
+  if $injection
+    bot refuse override
+    stop
+  $off_topic = execute check_off_topic
+  if $off_topic
+    bot refuse off topic
+    stop

@@ -1,0 +1,16 @@
+{
+  "documents": 3,
+  "pages": 6,
+  "chunks": 6,
+  "total_examples": 12,
+  "class_distribution": {
+    "supported": 9,
+    "contradicted": 1,
+    "not_mentioned": 2
+  },
+  "avg_passage_length": 307.92,
+  "avg_claim_length": 77.17,
+  "rejected_candidates": 6,
+  "validation_failure_rate": 1.0,
+  "duplicates_removed": 0
+}

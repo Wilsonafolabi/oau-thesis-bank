@@ -5,10 +5,6 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 class TelemetryClient:
-    """
-    Structured logging and observability client (Section 7.10).
-    Integrates with Langfuse if credentials are provided, otherwise falls back to structured local logging.
-    """
     def __init__(self):
         self.langfuse = None
         self.public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
@@ -24,18 +20,13 @@ class TelemetryClient:
                 )
                 logger.info("Langfuse telemetry initialized successfully.")
             except ImportError:
-                logger.warning("Langfuse package not installed. Falling back to structured logging. Install via: pip install langfuse")
+                logger.warning("Langfuse package not installed. Falling back to structured logging.")
         else:
             logger.info("Langfuse credentials not found. Operating in structured logging mode (Graceful Degradation per Section 7.10).")
 
     def trace_generation(self, name: str, input_text: str, output_text: str, metadata: Optional[Dict[str, Any]] = None):
         if self.langfuse:
-            self.langfuse.generation(
-                name=name,
-                input=input_text,
-                output=output_text,
-                metadata=metadata or {}
-            )
+            self.langfuse.generation(name=name, input=input_text, output=output_text, metadata=metadata or {})
         else:
             logger.info(f"[TELEMETRY] Generation: {name} | Input Len: {len(input_text)} | Output Len: {len(output_text)}")
 
@@ -45,5 +36,4 @@ class TelemetryClient:
         else:
             logger.info(f"[TELEMETRY] Event: {event_name} | Metadata: {metadata}")
 
-# Global instance
 telemetry = TelemetryClient()
