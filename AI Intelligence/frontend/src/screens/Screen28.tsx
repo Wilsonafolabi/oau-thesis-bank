@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout, Card } from '../components/shared';
 import { askResearchQuestion } from '../services/aiService';
+import type { RagCitation } from '../services/aiService';
 
-type Answer = { role: 'user' | 'ai'; content: string; sources?: Array<{ document_id: string; page: number; similarity: number }> };
+type Answer = { role: 'user' | 'ai'; content: string; citations?: RagCitation[] };
 
 const Screen28AIAnswer = () => {
   const [input, setInput] = useState('');
@@ -20,7 +21,7 @@ const Screen28AIAnswer = () => {
       setMessages((prev) => [...prev, {
         role: 'ai',
         content: data.answer || data.message || 'No answer returned.',
-        sources: data.sources || [],
+        citations: data.citations || [],
       }]);
     } catch (error) {
       setMessages((prev) => [...prev, { role: 'ai', content: error instanceof Error ? error.message : 'AI request failed.' }]);
@@ -37,12 +38,17 @@ const Screen28AIAnswer = () => {
             <div key={index} className={message.role === 'user' ? 'text-right' : 'text-left'}>
               <Card className={`inline-block max-w-[90%] p-4 text-left ${message.role === 'user' ? 'bg-[#00502F] text-white' : ''}`}>
                 <div className="whitespace-pre-wrap">{message.content}</div>
-                {message.role === 'ai' && message.sources?.length ? (
+                {message.role === 'ai' && message.citations?.length ? (
                   <div className="mt-4 border-t border-slate-200 pt-3">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Sources</p>
-                    <div className="space-y-1 text-xs text-slate-500">
-                      {message.sources.map((source, sourceIndex) => (
-                        <div key={sourceIndex}>Document {source.document_id} · page {source.page} · similarity {Number(source.similarity).toFixed(3)}</div>
+                    <div className="space-y-2 text-xs text-slate-500">
+                      {message.citations.map((citation, citationIndex) => (
+                        <div key={citationIndex}>
+                          <span className="font-medium">{citation.backend_thesis_id}</span>
+                          {citation.page_number != null ? ` · page ${citation.page_number}` : ''}
+                          {citation.relevance_score != null ? ` · score ${Number(citation.relevance_score).toFixed(2)}` : ''}
+                          {citation.text_snippet ? <div className="mt-1 text-slate-600">{citation.text_snippet.slice(0, 200)}</div> : null}
+                        </div>
                       ))}
                     </div>
                   </div>

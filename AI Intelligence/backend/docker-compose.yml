@@ -1,4 +1,4 @@
-services:
+﻿services:
   db:
     image: postgres:16
     container_name: oau_thesis_bank_db
@@ -43,23 +43,45 @@ services:
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "mc alias set local http://minio:9000 oau oau-thesis-secret
-      && mc mb --ignore-existing local/oau-thesis-bank"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - mc alias set local http://minio:9000 oau oau-thesis-secret && mc mb --ignore-existing local/oau-thesis-bank
 
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: oau_thesis_bank_backend
     restart: unless-stopped
-    command: >
-      sh -c "python manage.py wait_for_db &&
-             python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+    command:
+      - /app/.venv/bin/python
+      - -c
+      - |
+        import os
+        import sys
+        import subprocess
+
+        print("Python executable:", sys.executable, flush=True)
+        import dotenv
+        print("dotenv location:", dotenv.__file__, flush=True)
+
+        commands = [
+            [sys.executable, "manage.py", "wait_for_db"],
+            [sys.executable, "manage.py", "migrate"],
+            [sys.executable, "manage.py", "runserver", "0.0.0.0:8000"],
+        ]
+
+        for command in commands:
+            print("Running:", " ".join(command), flush=True)
+            result = subprocess.run(command, check=False)
+            if result.returncode != 0:
+                sys.exit(result.returncode)
     ports:
       - "8000:8000"
     volumes:
       - .:/app
-      - /app/.venv
+      - backend_venv:/app/.venv
       - ./media:/app/media
     depends_on:
       db:
@@ -87,3 +109,5 @@ volumes:
   db_pgdata:
     name: oau-thesis-bank_oau_thesis_bank_pgdata
   minio_data:
+  backend_venv:
+

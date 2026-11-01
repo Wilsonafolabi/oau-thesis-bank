@@ -1,0 +1,8 @@
+Collecting pgvector
+  Using cached pgvector-0.5.1-py3-none-any.whl.metadata (19 kB)
+Using cached pgvector-0.5.1-py3-none-any.whl (31 kB)
+Installing collected packages: pgvector
+Successfully installed pgvector-0.5.1
+
+[notice] A new release of pip is available: 26.2.1 -> 26.2.2
+[notice] To update, run: C:\Users\Administrator\anaconda3\envs\diactricsenv\python.exe -m pip install --upgrade pip

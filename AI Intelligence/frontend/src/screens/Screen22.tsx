@@ -1,26 +1,33 @@
 ﻿import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
-import { checkSimilarity, type SimilarityReport } from '../services/aiService';
+import { ApiError } from '../lib/api';
+import { checkSimilarityText } from '../services/aiService';
+import { SIMILARITY_REPORT_KEY } from './Screen23';
 
 const Screen22IdeaChecker = () => {
-  const { navigate } = useAppRouter();
-  const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<SimilarityReport | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [ideaText, setIdeaText] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { navigate } = useAppRouter();
 
-  const handleCheck = async () => {
-    if (!file) return;
+  const handleCheckText = async () => {
+    if (!ideaText.trim()) return;
     setLoading(true);
     setError('');
-    setResult(null);
     try {
-      const report = await checkSimilarity(file);
-      sessionStorage.setItem('oau:lastSimilarityReport', JSON.stringify(report));
-      setResult(report);
+      const report = await checkSimilarityText(ideaText.trim());
+      sessionStorage.setItem(SIMILARITY_REPORT_KEY, JSON.stringify(report));
       navigate('idea-similarity');
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Similarity check failed.');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setError('You do not have access to one or more compared documents.');
+      } else if (err instanceof ApiError && err.status === 503) {
+        setError(err.detail || 'Semantic comparison is unavailable right now.');
+      } else if (err instanceof ApiError) {
+        setError(err.detail);
+      } else {
+        setError('Similarity check failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -30,35 +37,59 @@ const Screen22IdeaChecker = () => {
     <AuthenticatedLayout title="Research Idea Checker">
       <div className="mx-auto max-w-3xl space-y-6">
         <Card className="p-6">
-          <h2 className="text-2xl font-bold text-slate-900">Check Research Similarity</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Check research similarity</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Upload a PDF. The AI service compares it with indexed thesis chunks and returns evidence.
+            Paste your research idea to compare it against thesis text in the OAU
+            repository. Only documents you are authorised to read are compared.
           </p>
-          <input
-            type="file"
-            accept=".pdf,application/pdf"
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
-            className="mt-5 block w-full rounded-md border border-slate-300 p-3 text-sm"
-          />
-          <Button className="mt-4" disabled={!file || loading} onClick={() => void handleCheck()}>
-            {loading ? 'Analyzingâ€¦' : 'Check Similarity'}
-          </Button>
+
+          <div className="mt-6">
+            <label
+              htmlFor="similarity-text"
+              className="text-sm font-medium text-slate-700 mb-2 block"
+            >
+              Research idea text
+            </label>
+            <textarea
+              id="similarity-text"
+              value={ideaText}
+              onChange={(event) => setIdeaText(event.target.value)}
+              rows={6}
+              className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm"
+              placeholder="Describe your proposed research idea…"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Compared as 200-word passages: exact, near-exact and partial wording overlap,
+              plus semantic similarity where the vector index is available. PDF upload is not
+              supported by this endpoint — paste the extracted text instead.
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-2">
+            <Button
+              className="mt-4"
+              disabled={loading || !ideaText.trim()}
+              onClick={handleCheckText}
+            >
+              {loading ? 'Checking similarity…' : 'Check similarity'}
+            </Button>
+            {error && (
+              <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+          </div>
         </Card>
-        {error && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700">{error}</p>}
-        {result && (
-          <Card className="p-6">
-            <p className="font-semibold text-slate-900">
-              {result.flagged_chunks_count || 0} potentially similar chunks found
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              {result.chunks_scanned || 0} chunks scanned at threshold {result.threshold_used}
-            </p>
-          </Card>
-        )}
+
+        <Card className="p-6 bg-slate-50 border border-slate-200">
+          <p className="text-sm text-slate-600">
+            Similarity is an indicator for review, not a plagiarism finding. Use the
+            plagiarism assessment screen for attribution-aware analysis.
+          </p>
+        </Card>
       </div>
     </AuthenticatedLayout>
   );
 };
 
 export default Screen22IdeaChecker;
-

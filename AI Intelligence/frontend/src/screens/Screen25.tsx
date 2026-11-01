@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
 import { detectGaps } from '../services/aiService';
 
+const formatGapType = (value?: string) =>
+  value ? value.replace(/_/g, ' ') : 'candidate gap';
+
 const Screen25GapExplorer = () => {
   const { navigate } = useAppRouter();
   const [input, setInput] = useState('');
@@ -34,14 +37,22 @@ const Screen25GapExplorer = () => {
         </Card>
         {error && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700">{error}</p>}
         <div className="space-y-4">
-          {gaps.map((gap) => (
-            <Card key={`${gap.topic_id}-${gap.topic_name}`} className="cursor-pointer p-5 hover:shadow-md" onClick={() => navigate('gap-detail', { topic: gap.topic_name })}>
+          {gaps.map((gap, index) => (
+            <Card
+              key={`${gap.gap_type}-${index}`}
+              className="cursor-pointer p-5 hover:shadow-md"
+              onClick={() => navigate('gap-detail', { topic: gap.gap_type })}
+            >
               <div className="flex items-center justify-between gap-4">
-                <h3 className="font-bold text-slate-900">{gap.topic_name}</h3>
-                <span className="text-sm text-slate-500">{gap.document_count} documents</span>
+                <h3 className="font-bold capitalize text-slate-900">{formatGapType(gap.gap_type)}</h3>
+                <span className="text-sm text-slate-500">{gap.source_thesis_references?.length ?? 0} sources</span>
               </div>
-              <p className="mt-2 text-sm text-slate-600">{gap.interpretation || 'Candidate underrepresented area; review the evidence before treating it as a confirmed gap.'}</p>
-              <p className="mt-2 text-xs text-slate-400">Method: {gap.method || 'baseline'}</p>
+              <p className="mt-2 text-sm text-slate-600">
+                {gap.description || gap.explanation || 'Candidate underrepresented area; review the evidence before treating it as a confirmed gap.'}
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Origin: {gap.source_origin || 'system_inferred'} · Confidence: {Math.round((gap.confidence ?? 0) * 100)}%
+              </p>
             </Card>
           ))}
         </div>

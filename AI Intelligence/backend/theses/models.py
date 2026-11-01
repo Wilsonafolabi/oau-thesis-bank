@@ -85,11 +85,15 @@ class Thesis(models.Model):
         return self.access_policy == self.AccessPolicy.PUBLIC
 
     def can_view(self, user):
-        if self.is_public():
-            return self.status == self.Status.PUBLISHED
+        # Owners and admins can always view their own/managed theses,
+        # regardless of publication status.
         if user and self.owner_id == user.id:
             return True
-        return bool(user and user.role == "admin")
+        if user and user.role == "admin":
+            return True
+        if self.is_public():
+            return self.status == self.Status.PUBLISHED
+        return False
 
 
 class SavedThesis(models.Model):

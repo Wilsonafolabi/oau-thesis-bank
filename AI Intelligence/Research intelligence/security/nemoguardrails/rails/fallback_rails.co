@@ -1,8 +1,0 @@
-define bot respond service error
-  "I am currently unable to process your request due to a service issue. Please try again later."
-
-define flow fallback rails
-  $healthy = execute check_provider_status
-  if not $healthy
-    bot respond service error
-    stop

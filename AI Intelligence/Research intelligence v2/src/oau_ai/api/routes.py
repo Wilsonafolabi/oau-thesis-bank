@@ -34,6 +34,8 @@ from ..db.session import get_session_factory
 def AsyncSessionLocal():
     return get_session_factory()()
 from ..errors import Phase3Error, ProviderUnavailableError
+from ..embeddings.service import EmbeddingService
+from ..embeddings.vectorize import VectorizeService
 from ..ingestion.service import IngestionService
 from ..llm.base import ChatMessage, ChatRequest
 from ..llm.router import TaskDesignation, complete_with_groq_designated, get_router
@@ -1588,5 +1590,10 @@ async def detect_ai_writing(
     )
 
     if result.status == "unavailable":
-        return JSONResponse(status_code=503, content=payload.model_dump())
+        # Django maps `message`/`code` through to the client, so the caller can
+        # tell "detector missing" apart from any other 503 and show the reason.
+        body = payload.model_dump()
+        body["code"] = "detector_unavailable"
+        body["message"] = result.blocker or "AI-writing detector is unavailable."
+        return JSONResponse(status_code=503, content=body)
     return payload
