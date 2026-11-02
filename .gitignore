@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 .venv/
 venv/
 __pycache__/
@@ -7,3 +7,26 @@ __pycache__/
 dist/
 build/
 .vscode/
+
+# Local archives
+*.zip
+
+# Downloaded model snapshots and weights
+/models/ai-text-detector-modernbert/
+
+# Local document storage (V2)
+AI Intelligence/Research intelligence v2/storage/documents/
+
+# Python-generated package metadata and caches
+**/*.egg-info/
+**/__pycache__/
+**/.pytest_cache/
+
+# Frontend-generated cache
+**/.vite/
+
+# Generated research datasets and evaluation output
+AI Intelligence/Research intelligence/output/
+
+# Backup files
+*.bak
