@@ -30,3 +30,14 @@ AI Intelligence/Research intelligence/output/
 
 # Backup files
 *.bak
+
+# Local thesis PDF corpus
+AI Intelligence/Research intelligence v2/storage/documents/*.pdf
+
+
+# Downloaded model cache and weights
+
+# Generated Python package/build files
+
+# Local backups
+
