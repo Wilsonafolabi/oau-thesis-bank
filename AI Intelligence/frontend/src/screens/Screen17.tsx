@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { useAppRouter, AuthenticatedLayout, Card, Button, UploadWizardNav } from '../components/shared';
 import { useUpload } from '../context/UploadContext';
 import { apiErrorMessage, createThesis } from '../lib/api';
+import { ingestThesisPdf } from '../services/aiService';
 
 const Screen17AIProcessing = () => {
   const { navigate } = useAppRouter();
@@ -13,6 +14,7 @@ const Screen17AIProcessing = () => {
 
   useEffect(() => {
     if (!file || submitted || submissionStarted.current) return;
+    const thesisPdf = file;
     submissionStarted.current = true;
     const form = new FormData();
     if (draft.title) form.append('title', draft.title);
@@ -24,9 +26,29 @@ const Screen17AIProcessing = () => {
     if (draft.year) form.append('year', String(draft.year));
     form.append('access_policy', draft.access_policy || 'public');
     (draft.tags || []).forEach((tag) => form.append('tags', tag));
-    form.append('file', file);
+    form.append('file', thesisPdf);
     setError('');
-    createThesis(form).then((thesis) => { setSubmittedThesisId(thesis.id); setSubmitted(true); navigate('publish-confirmation', { thesisId: thesis.id }); }).catch((nextError) => { submissionStarted.current = false; setError(apiErrorMessage(nextError, 'Unable to submit this thesis.')); });
+    createThesis(form).then(async (thesis) => {
+      setSubmittedThesisId(thesis.id);
+      setSubmitted(true);
+      try {
+        const aiJob = await ingestThesisPdf(thesisPdf, thesis.id, {
+          title: thesis.title,
+          author: thesis.author,
+          department: thesis.department,
+          faculty: thesis.faculty,
+          supervisor: thesis.supervisor,
+          abstract: thesis.abstract,
+          year: thesis.year,
+        });
+        navigate('publish-confirmation', { thesisId: thesis.id, aiJobId: aiJob.job_id });
+      } catch (aiError) {
+        navigate('publish-confirmation', {
+          thesisId: thesis.id,
+          aiError: apiErrorMessage(aiError, 'The thesis was saved, but AI indexing could not be started.'),
+        });
+      }
+    }).catch((nextError) => { submissionStarted.current = false; setError(apiErrorMessage(nextError, 'Unable to submit this thesis.')); });
   }, [draft, file, navigate, setSubmittedThesisId, submitted]);
 
   return <AuthenticatedLayout title="Processing Document"><div className="mx-auto mt-20 max-w-3xl text-center"><UploadWizardNav step={4} />{error ? <Card className="p-8"><AlertTriangle className="mx-auto h-10 w-10 text-red-500" /><h2 className="mt-4 text-2xl font-bold text-slate-900">Submission failed</h2><p className="mt-2 text-sm text-slate-500">{error}</p><Button className="mt-6" onClick={() => navigate('access-privacy')}>Review and try again</Button></Card> : <><div className="mb-8"><Loader2 className="mx-auto h-20 w-20 animate-spin text-[#00502F]" /></div><h2 className="mb-2 text-2xl font-bold text-slate-900">Submitting your thesis…</h2><p className="mb-8 text-slate-500">The connected backend is storing the PDF and starting its processing workflow.</p><div className="mx-auto max-w-md space-y-3 rounded-lg border border-slate-200 bg-white p-6 text-left text-sm shadow-sm"><div className="flex items-center text-emerald-700"><CheckCircle className="mr-2 h-4 w-4" /> Metadata prepared</div><div className="flex items-center text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending PDF to Django</div><div className="flex items-center text-slate-400"><span className="ml-1 mr-4 h-2 w-2 rounded-full bg-slate-300" /> Waiting for backend processing status</div></div></>}</div></AuthenticatedLayout>;

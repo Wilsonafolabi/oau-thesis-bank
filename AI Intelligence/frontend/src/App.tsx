@@ -48,6 +48,8 @@ import Screen43 from './screens/Screen43';
 import Screen44 from './screens/Screen44';
 import Screen45 from './screens/Screen45';
 import Screen47 from './screens/Screen47';
+import ScreenAIWritingDetection from './screens/ScreenAIWritingDetection';
+import ScreenPlagiarismAssess from './screens/ScreenPlagiarismAssess';
 
 export default function App() {
   const { currentScreen, user, navigate, authLoading } = useAppRouter();
@@ -132,6 +134,8 @@ function renderScreen(id: string) {
       case 'user-management': return <Screen45 />;
       case 'collaboration-requests': return <Screen32 />;
       case 'profile-setup': return <Screen47 />;
+      case 'ai-writing-detection': return <ScreenAIWritingDetection />;
+      case 'plagiarism-assess': return <ScreenPlagiarismAssess />;
       default: return <Screen01 />;
   }
 }
