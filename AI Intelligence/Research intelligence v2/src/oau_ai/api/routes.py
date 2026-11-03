@@ -30,6 +30,8 @@ from ..agent.graph import run_agent
 from ..auth.middleware import ActorContext
 from ..db.models import AIDocument, WorkingMemoryExchange
 from ..db.session import get_session_factory
+from ..embeddings.service import EmbeddingService
+from ..embeddings.vectorize import VectorizeService
 
 def AsyncSessionLocal():
     return get_session_factory()()
