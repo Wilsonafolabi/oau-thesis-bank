@@ -33,6 +33,23 @@ def _can_view_thesis(thesis, user):
     return False
 
 
+def _can_flag_or_save_thesis(thesis, user):
+    """Flagging/saving is allowed for published, non-private theses.
+
+    Drafts and private theses must not be discoverable/enumerable by ID, but
+    published public/restricted theses stay flaggable for moderation.
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if thesis.owner_id == user.id or user.role == "admin":
+        return True
+    if thesis.status != Thesis.Status.PUBLISHED:
+        return False
+    if thesis.access_policy == Thesis.AccessPolicy.PRIVATE:
+        return False
+    return True
+
+
 class ThesisViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly, IsActiveUser]
     lookup_field = "id"
@@ -118,6 +135,8 @@ class ThesisViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsActiveUser])
     def save(self, request, id=None):
         thesis = self.get_object()
+        if not _can_flag_or_save_thesis(thesis, request.user):
+            return Response({"detail": "You do not have access to this thesis."}, status=status.HTTP_403_FORBIDDEN)
         if thesis.owner_id == request.user.id:
             return Response({"detail": "You cannot save your own thesis."}, status=status.HTTP_400_BAD_REQUEST)
         _, created = SavedThesis.objects.get_or_create(user=request.user, thesis=thesis)
@@ -126,6 +145,8 @@ class ThesisViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsActiveUser])
     def flag(self, request, id=None):
         thesis = self.get_object()
+        if not _can_flag_or_save_thesis(thesis, request.user):
+            return Response({"detail": "You do not have access to this thesis."}, status=status.HTTP_403_FORBIDDEN)
         if thesis.owner_id == request.user.id:
             return Response({"detail": "You cannot flag your own thesis."}, status=status.HTTP_400_BAD_REQUEST)
         flag_type = (request.data.get("flag_type") or "").strip()

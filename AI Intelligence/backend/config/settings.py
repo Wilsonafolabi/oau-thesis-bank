@@ -10,6 +10,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 from config.storage import build_storages
@@ -34,11 +35,26 @@ def env(name, default=None):
     return value.strip()
 
 
-# Quick-start development settings - unsuitable for production
-SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-17k=jrztl%t^kv(g)hk2t=^6!h8a525s6!3*97js())rtm0(9w")
+def _resolve_debug(env_map):
+    """DEBUG is opt-in; it defaults to False (production-safe)."""
+    return (env_map.get("DJANGO_DEBUG") or "").strip() == "1"
 
-DEBUG = env("DJANGO_DEBUG", "1") == "1"
 
+def _resolve_secret_key(env_map, debug):
+    """Require a real secret in production; allow a dev-only fallback otherwise."""
+    key = (env_map.get("DJANGO_SECRET_KEY") or "").strip()
+    if key:
+        return key
+    if debug:
+        return "django-insecure-dev-only-change-me"
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off. "
+        "Provide a strong secret via the environment."
+    )
+
+
+DEBUG = _resolve_debug(os.environ)
+SECRET_KEY = _resolve_secret_key(os.environ, DEBUG)
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
@@ -70,6 +86,7 @@ INSTALLED_APPS = [
     "analytics",
     "integrations",
     "admin_panel",
+    "ai_integration",
 ]
 
 MIDDLEWARE = [
@@ -183,6 +200,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+# AI Integration Service (Phase 3 V2)
+# Base URL of the V2 AI Intelligence service (e.g. http://127.0.0.1:8001)
+AI_SERVICE_URL = env("AI_SERVICE_URL", "")
+# Shared secret for Django -> V2 service-to-service authentication.
+BACKEND_API_INTERNAL_TOKEN = env("BACKEND_API_INTERNAL_TOKEN", "")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "OAU Thesis Bank API",
