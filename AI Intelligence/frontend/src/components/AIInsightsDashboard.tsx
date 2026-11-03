@@ -1,8 +1,10 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { getRecommendations, detectGaps, logInteraction, Recommendation, ResearchGap } from '../services/aiService';
+import { detectGaps, getRecommendations } from '../services/aiService';
+import type { Recommendation, ResearchGap } from '../services/aiService';
 
 const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recommendationNote, setRecommendationNote] = useState<string | null>(null);
   const [gaps, setGaps] = useState<ResearchGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,32 +14,22 @@ const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
       try {
         setLoading(true);
         setError(null);
-        const [recs, gapData] = await Promise.all([
-          getRecommendations(userId),
-          detectGaps()
+        const [gapList, recs] = await Promise.all([
+          detectGaps(),
+          getRecommendations({ top_k: 5 }),
         ]);
-        setRecommendations(recs);
-        setGaps(gapData);
+        setGaps(gapList);
+        setRecommendations(recs.recommendations);
+        setRecommendationNote(recs.insufficient_evidence ? recs.message : null);
       } catch (err) {
         console.error("Failed to load AI insights:", err);
-        setError("Unable to load AI insights. Please ensure the AI service is running on port 8888.");
+        setError("Unable to load AI insights. Please ensure the backend and AI service are running.");
       } finally {
         setLoading(false);
       }
     };
     loadData();
   }, [userId]);
-
-  const handleViewThesis = async (thesisId: string) => {
-    try {
-      await logInteraction(userId, thesisId, "view");
-      // Refresh recommendations after logging interaction
-      const updatedRecs = await getRecommendations(userId);
-      setRecommendations(updatedRecs);
-    } catch (err) {
-      console.error("Failed to log interaction:", err);
-    }
-  };
 
   if (loading) {
     return (
@@ -66,7 +58,7 @@ const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
     return (
       <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
         <p className="text-red-600 font-medium">?? {error}</p>
-        <p className="text-sm text-red-500 mt-1">Make sure your FastAPI backend is running: <code className="bg-red-100 px-2 py-1 rounded">uvicorn main:app --reload --port 8888</code></p>
+        <p className="text-sm text-red-500 mt-1">Make sure the Django backend is running and the AI service is reachable.</p>
       </div>
     );
   }
@@ -81,25 +73,30 @@ const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
         {recommendations.length === 0 ? (
           <div className="text-center py-8">
             <div className="text-4xl mb-2"></div>
-            <p className="text-gray-500 dark:text-gray-400">No recommendations yet.</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Interact with more theses to get personalized recommendations!</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              {recommendationNote || 'No recommendations yet.'}
+            </p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+              Recommendations use your stated research interests and repository evidence.
+            </p>
           </div>
         ) : (
           <ul className="space-y-3">
             {recommendations.map((rec, idx) => (
-              <li key={idx} 
-                  className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-gray-600 transition cursor-pointer"
-                  onClick={() => handleViewThesis(rec.thesis_id)}>
-                <span className="font-medium text-gray-800 dark:text-gray-200 truncate flex-1 mr-2">
-                  {rec.thesis_id?.replace('_', ' ').toUpperCase()}
-                </span>
-                <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${
-                  rec.source === 'learned_model' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-blue-100 text-blue-800'
-                }`}>
-                  {rec.source === 'learned_model' ? 'Learned' : 'Baseline'}
-                </span>
+              <li key={idx}
+                  className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                  >
+                <div className="flex justify-between items-center gap-2">
+                  <span className="font-medium text-gray-800 dark:text-gray-200 truncate flex-1">
+                    {rec.title}
+                  </span>
+                  <span className="text-xs px-2 py-1 rounded-full whitespace-nowrap bg-blue-100 text-blue-800">
+                    {(rec.evidence_strength * 100).toFixed(0)}% match
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {rec.explanation}
+                </p>
               </li>
             ))}
           </ul>
@@ -121,17 +118,17 @@ const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
           <ul className="space-y-3 max-h-96 overflow-y-auto">
             {gaps.map((gap, idx) => (
               <li key={idx} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-purple-50 dark:hover:bg-gray-600 transition">
-                <div className="font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                  {gap.topic_name}
+                <div className="font-semibold capitalize text-gray-800 dark:text-gray-200 mb-1">
+                  {gap.gap_type?.replace(/_/g, ' ') || gap.description || 'Research gap'}
                 </div>
                 <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  <span className="font-medium">Keywords:</span> {gap.representative_keywords.join(', ')}
+                  <span className="font-medium">Evidence:</span> {gap.source_thesis_references?.length ?? 0} source(s) · confidence {Math.round((gap.confidence ?? 0) * 100)}%
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-red-600 dark:text-red-400 font-medium bg-red-100 dark:bg-red-900/30 px-2 py-1 rounded">
-                    Only {gap.document_count} thesis(es) - Under-researched
+                    {gap.source_origin === 'author_stated' ? 'Author-stated' : 'System-inferred'}
                   </span>
-                  <span className="text-xs text-gray-500">Topic #{gap.topic_id}</span>
+                  <span className="text-xs text-gray-500">Gap #{idx + 1}</span>
                 </div>
               </li>
             ))}
