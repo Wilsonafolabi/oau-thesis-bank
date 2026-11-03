@@ -26,6 +26,22 @@ class DocumentUploadResponse(BaseModel):
     message: str
 
 
+class DocumentPageText(BaseModel):
+    page_number: int
+    text: Optional[str]
+    char_offset_start: Optional[int]
+    char_offset_end: Optional[int]
+    is_scanned: bool
+
+
+class DocumentTextResponse(BaseModel):
+    document_id: str
+    backend_thesis_id: str
+    pages: List[DocumentPageText]
+    total_characters: int
+    total_pages: int
+
+
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
@@ -498,3 +514,34 @@ class AIWritingResponseSchema(BaseModel):
     limitations: List[str] = []
     blocker: Optional[str] = None
     disclaimer: str
+
+
+# ---------------------------------------------------------------------------
+# Thesis Q&A (Part 4 — Stage 3.6)
+# ---------------------------------------------------------------------------
+
+
+class ThesisQARequest(BaseModel):
+    backend_thesis_id: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1, max_length=5_000)
+    scope: str = Field(default="this_thesis", pattern="^(this_thesis|public_theses)$")
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class ThesisQACitationSchema(BaseModel):
+    chunk_id: str
+    document_id: str
+    backend_thesis_id: str
+    text_snippet: str
+    page_number: Optional[int] = None
+    section: Optional[str] = None
+    relevance_score: float
+
+
+class ThesisQAResponseSchema(BaseModel):
+    answer: str
+    citations: List[ThesisQACitationSchema] = []
+    confidence: float
+    insufficient_evidence: bool = False
+    message: Optional[str] = None
+    trace_id: str

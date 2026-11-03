@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { AuthenticatedLayout, Button, Card, Badge } from '../components/shared';
+import { AuthenticatedLayout, Button, Card, Badge, useAppRouter } from '../components/shared';
 import { ApiError } from '../lib/api';
-import { assessPlagiarism, type PlagiarismResponse, type PlagiarismStatus } from '../services/aiService';
+import {
+  assessPlagiarism,
+  type PlagiarismResponse,
+  type PlagiarismStatus,
+} from '../services/aiService';
+import { usePdfDocumentProcessing, type PdfStage } from '../hooks/usePdfDocumentProcessing';
 
 const STATUS_LABEL: Record<PlagiarismStatus, string> = {
   attribution_present: 'Attribution detected',
@@ -20,6 +25,25 @@ const ScreenPlagiarismAssess = () => {
   const [result, setResult] = useState<PlagiarismResponse | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<'text' | 'pdf'>('text');
+
+  const {
+    file,
+    setFile,
+    pdfError,
+    stage: pdfStage,
+    progress: pdfProgress,
+    result: pdfResult,
+    isBusy: pdfBusy,
+    processPdf: processPdfAnalysis,
+    reset: resetPdf,
+    scanInfo,
+  } = usePdfDocumentProcessing({
+    analysisFn: async (txt) => {
+      return await assessPlagiarism({ text: txt.trim() });
+    },
+    maxChars: 100_000,
+  });
 
   const handleAssess = async () => {
     if (!text.trim()) return;
@@ -39,6 +63,18 @@ const ScreenPlagiarismAssess = () => {
     }
   };
 
+  const handlePdfRun = async () => {
+    if (!file) return;
+    setError('');
+    setResult(null);
+    await processPdfAnalysis();
+    if (pdfResult && typeof pdfResult === 'object' && 'status' in pdfResult) {
+      setResult(pdfResult as PlagiarismResponse);
+    }
+  };
+
+  const isTextBusy = loading || pdfBusy;
+
   return (
     <AuthenticatedLayout title="Plagiarism Review">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -54,24 +90,125 @@ const ScreenPlagiarismAssess = () => {
         <Card className="p-6">
           <h2 className="text-xl font-bold text-slate-900 mb-2">Assess a passage</h2>
           <p className="text-sm text-slate-600 mb-4">
-            Paste the text you want reviewed. Only repository documents you are authorised to
-            read are compared.
+            Paste the text you want reviewed, or upload a PDF. Only repository documents you
+            are authorised to read are compared.
           </p>
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={8}
-            aria-label="Text to assess"
-            className="w-full rounded-md border border-slate-300 p-3 text-sm"
-            placeholder="Paste the passage to assess…"
-          />
-          <Button className="mt-4" disabled={loading || !text.trim()} onClick={handleAssess}>
-            {loading ? 'Assessing…' : 'Assess attribution'}
-          </Button>
-          {error && (
-            <p role="alert" className="mt-3 rounded-md bg-red-50 p-4 text-sm text-red-700">
-              {error}
-            </p>
+
+          {/* Mode selector */}
+          <div className="mt-4 flex gap-2 border-b border-slate-200 pb-2">
+            <Button
+              variant={mode === 'text' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => {
+                setMode('text');
+                setError('');
+                setResult(null);
+                resetPdf();
+              }}
+            >
+              Paste text
+            </Button>
+            <Button
+              variant={mode === 'pdf' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => {
+                setMode('pdf');
+                setError('');
+                setResult(null);
+                resetPdf();
+              }}
+            >
+              Upload PDF
+            </Button>
+          </div>
+
+          {mode === 'text' && (
+            <div className="mt-6">
+              <textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                rows={8}
+                aria-label="Text to assess"
+                className="w-full rounded-md border border-slate-300 p-3 text-sm"
+                placeholder="Paste the passage to assess…"
+              />
+              <Button
+                className="mt-4"
+                disabled={isTextBusy || !text.trim()}
+                onClick={handleAssess}
+              >
+                {isTextBusy ? 'Assessing…' : 'Assess attribution'}
+              </Button>
+              {error && (
+                <p role="alert" className="mt-3 rounded-md bg-red-50 p-4 text-sm text-red-700">
+                  {error}
+                </p>
+              )}
+            </div>
+          )}
+
+          {mode === 'pdf' && (
+            <div className="mt-6 space-y-4">
+              <label
+                htmlFor="plagiarism-pdf"
+                className="text-sm font-medium text-slate-700 mb-2 block"
+              >
+                PDF document
+              </label>
+              <div className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm flex items-center gap-3">
+                <input
+                  id="plagiarism-pdf"
+                  type="file"
+                  accept=".pdf"
+                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  className="w-full text-sm"
+                />
+                {file && (
+                  <div className="flex-1 truncate">
+                    <p className="text-sm text-slate-900">{file.name}</p>
+                    <p className="text-xs text-slate-500">{file.size} bytes</p>
+                  </div>
+                )}
+                {file && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      setFile(null);
+                      resetPdf();
+                    }}
+                    disabled={pdfBusy}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              {pdfError && (
+                <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                  {pdfError}
+                </p>
+              )}
+              {pdfStage !== 'idle' && (
+                <Card className="p-4 bg-slate-50 border border-slate-200">
+                  <p className="text-sm text-slate-600">{pdfProgress}</p>
+                  {pdfStage === 'complete' && (
+                    <>
+                      <p className="mt-2 text-sm text-emerald-700">
+                        PDF assessed. Results below.
+                      </p>
+                      {scanInfo && scanInfo.scannedPages > 0 && (
+                        <p className="mt-1 text-xs text-amber-700 bg-amber-50/50 p-2 rounded">
+                          {scanInfo.scannedPages} of {scanInfo.totalPages} page(s)
+                          could not be extracted (scanned or image-based). Assessment
+                          covers only the {scanInfo.extractablePages} extractable
+                          page(s).
+                        </p>
+                      )}
+                    </>
+                  )}
+                </Card>
+              )}
+            </div>
           )}
         </Card>
 
@@ -92,14 +229,23 @@ const ScreenPlagiarismAssess = () => {
                   {result.passages.map((passage, index) => (
                     <div key={index} className="rounded-md border border-slate-100 p-4">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <Badge variant={passage.assessment === 'review_required' ? 'gray' : 'blue'} className="text-xs">
+                        <Badge
+                          variant={
+                            passage.assessment === 'review_required' ? 'gray' : 'blue'
+                          }
+                          className="text-xs"
+                        >
                           {STATUS_LABEL[passage.assessment]}
                         </Badge>
                         {passage.quoted && (
-                          <span className="text-xs text-slate-500">Quotation marks found</span>
+                          <span className="text-xs text-slate-500">
+                            Quotation marks found
+                          </span>
                         )}
                         {passage.cited && (
-                          <span className="text-xs text-slate-500">Citation found</span>
+                          <span className="text-xs text-slate-500">
+                            Citation found
+                          </span>
                         )}
                       </div>
                       <p className="text-sm text-slate-700">{passage.reason}</p>
@@ -136,7 +282,9 @@ const ScreenPlagiarismAssess = () => {
             )}
 
             <Card className="p-6 bg-amber-50 border border-amber-200">
-              <p className="text-sm text-amber-800 leading-relaxed">{result.disclaimer}</p>
+              <p className="text-sm text-amber-800 leading-relaxed">
+                {result.disclaimer}
+              </p>
             </Card>
           </div>
         )}

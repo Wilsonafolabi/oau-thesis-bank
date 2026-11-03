@@ -12,6 +12,7 @@
  */
 
 import { request } from '../lib/api';
+import { ApiError } from '../lib/api';
 
 // ---------------------------------------------------------------------------
 // Health
@@ -76,6 +77,33 @@ export interface JobStatusResponse {
 
 export const getAIDocumentJob = (jobId: string) =>
   request<JobStatusResponse>(`ai/documents/jobs/${encodeURIComponent(jobId)}/`);
+
+export interface DocumentPageText {
+  page_number: number;
+  text: string | null;
+  char_offset_start: number | null;
+  char_offset_end: number | null;
+  is_scanned: boolean;
+}
+
+export interface DocumentTextResponse {
+  document_id: string;
+  backend_thesis_id: string;
+  pages: DocumentPageText[];
+  total_characters: number;
+  total_pages: number;
+}
+
+export const getDocumentText = (internalDocumentId: string) =>
+  request<DocumentTextResponse>(
+    `ai/documents/${encodeURIComponent(internalDocumentId)}/text/`,
+  );
+
+export const deleteAIDocument = (internalDocumentId: string) =>
+  request<{ detail: string }>(
+    `ai/documents/${encodeURIComponent(internalDocumentId)}/`,
+    { method: 'DELETE' },
+  );
 
 // ---------------------------------------------------------------------------
 // RAG assistant
@@ -223,6 +251,49 @@ export const summarizeThesis = async (thesisId: number | string) => {
       : undefined,
   };
 };
+
+// ---------------------------------------------------------------------------
+// Thesis Q&A (Stage 3.6)
+// ---------------------------------------------------------------------------
+
+export type ThesisQAScope = 'this_thesis' | 'public_theses';
+
+export interface ThesisQACitation {
+  chunk_id: string;
+  document_id: string;
+  backend_thesis_id: string;
+  text_snippet: string;
+  page_number: number | null;
+  section: string | null;
+  relevance_score: number;
+}
+
+export interface ThesisQAResponse {
+  answer: string;
+  citations: ThesisQACitation[];
+  confidence: number;
+  insufficient_evidence: boolean;
+  message: string | null;
+  trace_id: string;
+}
+
+export interface ThesisQARequest {
+  backend_thesis_id: string;
+  question: string;
+  scope?: ThesisQAScope;
+  top_k?: number;
+}
+
+export const askThesisQuestion = (body: ThesisQARequest) =>
+  request<ThesisQAResponse>('ai/thesis-qa/ask/', {
+    method: 'POST',
+    json: {
+      backend_thesis_id: body.backend_thesis_id,
+      question: body.question,
+      scope: body.scope ?? 'this_thesis',
+      top_k: body.top_k ?? 5,
+    },
+  });
 
 // ---------------------------------------------------------------------------
 // Research gaps
@@ -382,8 +453,38 @@ export interface SimilarityCheckRequest {
   enable_semantic?: boolean;
 }
 
-export const checkSimilarity = (body: SimilarityCheckRequest) =>
-  request<SimilarityResponse>('ai/similarity/check/', { method: 'POST', json: body });
+// Status codes worth retrying: transient server / network issues, never 4xx client errors.
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+export const checkSimilarity = async (
+  body: SimilarityCheckRequest,
+  { retries = 2, baseDelayMs = 500 }: { retries?: number; baseDelayMs?: number } = {},
+): Promise<SimilarityResponse> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await request<SimilarityResponse>('ai/similarity/check/', {
+        method: 'POST',
+        json: body,
+      });
+    } catch (err) {
+      lastError = err;
+      if (
+        err instanceof ApiError &&
+        RETRYABLE_STATUS_CODES.has(err.status) &&
+        attempt < retries
+      ) {
+        await sleep(baseDelayMs * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+};
 
 export const checkSimilarityText = (
   text: string,
@@ -568,10 +669,21 @@ export const getMemoryPreferences = () =>
 // Idea extension (RAG wrapper used by the idea screens)
 // ---------------------------------------------------------------------------
 
+export interface IdeaExtensionCitation {
+  chunk_id: string;
+  document_id: string;
+  backend_thesis_id: string;
+  text_snippet: string;
+  page_number: number | null;
+  section: string | null;
+  relevance_score: number;
+}
+
 export interface IdeaExtensionResponse {
   extended_idea?: string;
   suggestions?: string;
   message?: string;
+  citations: IdeaExtensionCitation[];
 }
 
 export const extendIdea = async (idea: string): Promise<IdeaExtensionResponse> => {
@@ -582,5 +694,14 @@ export const extendIdea = async (idea: string): Promise<IdeaExtensionResponse> =
   return {
     extended_idea: response.answer || undefined,
     message: response.message ?? undefined,
+    citations: response.citations.map((c) => ({
+      chunk_id: c.chunk_id,
+      document_id: c.document_id,
+      backend_thesis_id: c.backend_thesis_id,
+      text_snippet: c.text_snippet,
+      page_number: c.page_number,
+      section: c.section,
+      relevance_score: c.relevance_score,
+    })),
   };
 };

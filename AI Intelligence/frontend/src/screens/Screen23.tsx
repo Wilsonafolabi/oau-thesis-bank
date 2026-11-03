@@ -163,8 +163,11 @@ const Screen23SimilarityResults = () => {
           </Card>
         )}
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex gap-3">
           <Button onClick={() => navigate('idea-checker')}>Run another check</Button>
+          <Button variant="secondary" onClick={() => navigate('idea-extension')}>
+            Extend a matched idea
+          </Button>
         </div>
       </div>
     </AuthenticatedLayout>

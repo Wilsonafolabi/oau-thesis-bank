@@ -243,6 +243,69 @@ class AIDocumentDeleteView(APIView):
             return _map_v2_error(exc)
 
 
+class AIDocumentTextView(APIView):
+    """Retrieve extracted text for an ingested document.
+
+    Used by the temporary PDF similarity check flow. Access is restricted to
+    the document owner or an admin by the V2 service; Django forwards the
+    authenticated actor context.
+    """
+
+    permission_classes = [IsAuthenticated, IsActiveUser]
+
+    def get(self, request, internal_document_id):
+        try:
+            internal_token = get_internal_service_token()
+        except ValueError as exc:
+            return Response(
+                {"error": "Configuration Error", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        actor_context = build_actor_context(request.user)
+        try:
+            result = forward_to_v2(
+                method="GET",
+                path=f"/api/v2/documents/{internal_document_id}/text",
+                actor_context=actor_context,
+                internal_token=internal_token,
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            return _map_v2_error(exc)
+
+
+class DocumentCleanupView(APIView):
+    """Clean up expired temporary documents (tmp-pdf- prefix).
+
+    Admin-only endpoint that deletes temporary PDF documents older than 24
+    hours that are in a terminal state. Used by scheduled cleanup jobs.
+    """
+
+    permission_classes = [IsAuthenticated, IsActiveUser]
+
+    def delete(self, request):
+        try:
+            internal_token = get_internal_service_token()
+        except ValueError as exc:
+            return Response(
+                {"error": "Configuration Error", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        actor_context = build_actor_context(request.user)
+        try:
+            result = forward_to_v2(
+                method="DELETE",
+                path="/api/v2/documents/cleanup-temporary",
+                actor_context=actor_context,
+                internal_token=internal_token,
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            return _map_v2_error(exc)
+
+
 class AIRAGAskView(APIView):
     """Ask a grounded research question.
 
@@ -1006,6 +1069,65 @@ class AIMemoryPreferencesView(APIView):
                 actor_context=actor_context,
                 internal_token=internal_token,
                 timeout=60,
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            status_code = status.HTTP_502_BAD_GATEWAY
+            if "unavailable" in str(exc).lower():
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return Response(
+                {"error": "AI Service Error", "detail": str(exc)},
+                status=status_code,
+            )
+
+
+class AIThesisQAView(APIView):
+    """Ask a question about a thesis (or across public theses).
+
+    Proxied to V2 /api/v2/thesis-qa/ask.
+    """
+
+    permission_classes = [IsAuthenticated, IsActiveUser]
+
+    def post(self, request):
+        try:
+            internal_token = get_internal_service_token()
+        except ValueError as exc:
+            return Response(
+                {"error": "Configuration Error", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        backend_thesis_id = request.data.get("backend_thesis_id")
+        question = request.data.get("question")
+        scope = request.data.get("scope", "this_thesis")
+        top_k = request.data.get("top_k", 5)
+
+        if not backend_thesis_id:
+            return Response(
+                {"error": "Validation Error", "detail": "backend_thesis_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not question or not str(question).strip():
+            return Response(
+                {"error": "Validation Error", "detail": "question is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        actor_context = build_actor_context(request.user)
+        try:
+            result = forward_to_v2(
+                method="POST",
+                path="/api/v2/thesis-qa/ask",
+                actor_context=actor_context,
+                internal_token=internal_token,
+                data={
+                    "backend_thesis_id": backend_thesis_id,
+                    "question": question,
+                    "scope": scope,
+                    "top_k": top_k,
+                },
+                timeout=120,
             )
             return Response(result, status=status.HTTP_200_OK)
         except ValueError as exc:

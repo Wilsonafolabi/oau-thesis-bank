@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -28,7 +29,7 @@ from fastapi.responses import JSONResponse
 from ..api.dependencies import get_actor_context, get_internal_service_token, get_trace_id
 from ..agent.graph import run_agent
 from ..auth.middleware import ActorContext
-from ..db.models import AIDocument, WorkingMemoryExchange
+from ..db.models import AIDocument, AIJob, AIPage, JobStatus, WorkingMemoryExchange
 from ..db.session import get_session_factory
 
 def AsyncSessionLocal():
@@ -52,6 +53,8 @@ from .schemas import (
     AgentAskResponse,
     AssistantChatRequest,
     AssistantChatResponse,
+    DocumentPageText,
+    DocumentTextResponse,
     DocumentUploadRequest,
     DocumentUploadResponse,
     EntityExtractRequest,
@@ -98,6 +101,9 @@ from .schemas import (
     AIWritingDetectRequest,
     AIWritingResponseSchema,
     AIWritingSegmentSchema,
+    ThesisQARequest,
+    ThesisQAResponseSchema,
+    ThesisQACitationSchema,
 )
 from ..telemetry.core import TelemetryEvent, telemetry_context
 
@@ -322,6 +328,155 @@ async def delete_document(
             return _phase3_error_response(exc)
 
     return {"detail": f"Document {backend_thesis_id} deleted."}
+
+
+@router.delete(
+    "/documents/cleanup-temporary",
+    summary="Clean up expired temporary documents",
+)
+async def cleanup_temporary_documents(
+    _token: str = Depends(get_internal_service_token),
+    actor: ActorContext = Depends(get_actor_context),
+    trace_id: str = Depends(get_trace_id),
+):
+    """Delete expired temporary documents identified by the ``tmp-pdf-`` prefix.
+
+    Only removes documents that:
+    - Have ``backend_thesis_id`` starting with ``tmp-pdf-`` (temporary uploads only;
+      permanent repository theses are never affected).
+    - Were created more than 24 hours ago.
+    - Have no active ingestion job (job is success/failed, or no job exists).
+
+    Admin-only. Idempotent: safe to run on a schedule (e.g. daily cron).
+    """
+    if "admin" not in actor.roles:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(AIDocument).where(
+                AIDocument.backend_thesis_id.like("tmp-pdf-%"),
+                AIDocument.created_at < cutoff,
+            )
+        )
+        documents = result.scalars().all()
+
+        cleaned = 0
+        skipped = 0
+        errors: list[str] = []
+
+        for document in documents:
+            # Skip documents with an active (non-terminal) ingestion job.
+            job_result = await db.execute(
+                select(AIJob)
+                .where(AIJob.document_id == document.id)
+                .order_by(AIJob.created_at.desc())
+                .limit(1)
+            )
+            latest_job = job_result.scalar_one_or_none()
+
+            if latest_job and latest_job.status not in (
+                JobStatus.SUCCESS,
+                JobStatus.FAILED,
+            ):
+                skipped += 1
+                logger.info(
+                    "cleanup_temporary.skip document_id=%s backend_thesis_id=%s "
+                    "reason=job_active status=%s",
+                    document.id,
+                    document.backend_thesis_id,
+                    latest_job.status.value,
+                )
+                continue
+
+            try:
+                service = IngestionService(db_session=db)
+                await service.delete_document(document.backend_thesis_id, actor)
+                cleaned += 1
+                logger.info(
+                    "cleanup_temporary.deleted document_id=%s backend_thesis_id=%s",
+                    document.id,
+                    document.backend_thesis_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(str(exc))
+                logger.warning(
+                    "cleanup_temporary.error document_id=%s backend_thesis_id=%s error=%s",
+                    document.id,
+                    document.backend_thesis_id,
+                    exc,
+                )
+
+        return {
+            "cleaned": cleaned,
+            "skipped": skipped,
+            "errors": len(errors),
+            "error_details": errors[:10],
+        }
+
+
+@router.get(
+    "/documents/{internal_document_id}/text",
+    response_model=DocumentTextResponse,
+    summary="Get extracted document text with page mappings",
+)
+async def get_document_text(
+    internal_document_id: str,
+    _token: str = Depends(get_internal_service_token),
+    actor: ActorContext = Depends(get_actor_context),
+    trace_id: str = Depends(get_trace_id),
+):
+    """Return extracted page-level text for an ingested document.
+
+    Access is restricted to the document owner or an admin. Used by the
+    temporary PDF similarity check flow to retrieve extracted text without
+    exposing it to unauthorised callers.
+    """
+    async with AsyncSessionLocal() as db:
+        document = await db.get(AIDocument, internal_document_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        # Access control: only the document owner or an admin may read the text.
+        if (
+            document.backend_user_id != actor.user_id
+            and "admin" not in actor.roles
+        ):
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        result = await db.execute(
+            select(AIPage)
+            .where(AIPage.document_id == internal_document_id)
+            .order_by(AIPage.page_number)
+        )
+        pages = result.scalars().all()
+
+        if not pages:
+            raise HTTPException(
+                status_code=404,
+                detail="No extracted pages found for this document.",
+            )
+
+        total_characters = sum(len(page.text_content or "") for page in pages)
+
+        return DocumentTextResponse(
+            document_id=document.id,
+            backend_thesis_id=document.backend_thesis_id,
+            pages=[
+                DocumentPageText(
+                    page_number=page.page_number,
+                    text=page.text_content,
+                    char_offset_start=page.char_offset_start,
+                    char_offset_end=page.char_offset_end,
+                    is_scanned=page.is_scanned,
+                )
+                for page in pages
+            ],
+            total_characters=total_characters,
+            total_pages=len(pages),
+        )
 
 
 @router.post(
@@ -1051,6 +1206,90 @@ async def get_thesis_summary(
         )
 
     return _thesis_summary_schema(summary)
+
+
+@router.post(
+    "/thesis-qa/ask",
+    response_model=ThesisQAResponseSchema,
+    summary="Ask a question about a thesis (or across public theses)",
+)
+async def ask_thesis_qa(
+    request: ThesisQARequest,
+    _token: str = Depends(get_internal_service_token),
+    actor: ActorContext = Depends(get_actor_context),
+    trace_id: str = Depends(get_trace_id),
+):
+    """Answer a question grounded in thesis text.
+
+    Scope ``this_thesis`` restricts retrieval to the named thesis only.
+    Scope ``public_theses`` retrieves across all publicly accessible theses.
+    Answers cite actual retrieved passages with page numbers where available.
+    """
+    from ..rag.service import RAGService
+
+    async with AsyncSessionLocal() as db:
+        # Resolve the internal document ID(s) for the requested thesis.
+        if request.scope == "this_thesis":
+            doc_result = await db.execute(
+                select(AIDocument).where(
+                    AIDocument.backend_thesis_id == request.backend_thesis_id
+                )
+            )
+            document = doc_result.scalar_one_or_none()
+            if not document:
+                raise HTTPException(
+                    status_code=404, detail="Thesis not found."
+                )
+            # Verify access to the thesis.
+            retrieval = RetrievalService(db_session=db)
+            access = await retrieval.check_document_access(
+                request.backend_thesis_id, actor
+            )
+            if not access.can_view:
+                raise HTTPException(status_code=403, detail=access.reason or "Access denied.")
+            document_ids = [document.id]
+        else:
+            # public_theses: only documents with access_level == "public".
+            document_ids = None
+
+        rag_service = RAGService(
+            db_session=db,
+            retrieval_service=RetrievalService(db_session=db),
+        )
+        try:
+            rag_result = await rag_service.ask(
+                question=request.question,
+                actor_context=actor,
+                document_ids=document_ids,
+                top_k=request.top_k,
+                request_id=trace_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Thesis Q&A generation failed.")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Q&A generation failed: {exc}",
+            )
+
+    return ThesisQAResponseSchema(
+        answer=rag_result.answer,
+        citations=[
+            ThesisQACitationSchema(
+                chunk_id=c.chunk_id,
+                document_id=c.document_id,
+                backend_thesis_id=c.backend_thesis_id,
+                text_snippet=c.text_snippet,
+                page_number=c.page_number,
+                section=c.section,
+                relevance_score=c.relevance_score,
+            )
+            for c in rag_result.citations
+        ],
+        confidence=rag_result.confidence,
+        insufficient_evidence=rag_result.insufficient_evidence,
+        message=rag_result.message,
+        trace_id=rag_result.trace_id,
+    )
 
 
 @router.get(

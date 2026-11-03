@@ -14,7 +14,9 @@ from .views import (
     AIMemoryPreferencesView,
     AIMemoryRetrieveView,
     AIMemoryThesisSummaryView,
+    DocumentCleanupView,
     AIDocumentDeleteView,
+    AIDocumentTextView,
     AIDocumentUploadView,
     AIAssistantChatView,
     AIJobStatusView,
@@ -25,6 +27,7 @@ from .views import (
     AITopicAnalysisView,
     AIWritingDetectView,
     AIPlagiarismAssessView,
+    AIThesisQAView,
 )
 
 urlpatterns = [
@@ -34,6 +37,16 @@ urlpatterns = [
         "documents/jobs/<str:job_id>/",
         AIJobStatusView.as_view(),
         name="ai-job-status",
+    ),
+    path(
+        "documents/<str:internal_document_id>/text/",
+        AIDocumentTextView.as_view(),
+        name="ai-document-text",
+    ),
+    path(
+        "documents/cleanup-temporary/",
+        DocumentCleanupView.as_view(),
+        name="ai-document-cleanup-temporary",
     ),
     path(
         "documents/<str:backend_thesis_id>/",
@@ -71,6 +84,11 @@ urlpatterns = [
         "ai-writing/detect/",
         AIWritingDetectView.as_view(),
         name="ai-writing-detect",
+    ),
+    path(
+        "thesis-qa/ask/",
+        AIThesisQAView.as_view(),
+        name="ai-thesis-qa-ask",
     ),
 
     # Static memory routes MUST precede the dynamic memory/<memory_id>/ route,

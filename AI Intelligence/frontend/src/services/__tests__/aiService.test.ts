@@ -196,6 +196,42 @@ describe('AI service — Django contracts', () => {
     expect(url).toContain('ai/similarity/check/');
     expect((init.body as string).includes('"max_matches":20')).toBe(true);
     expect((init.body as string).includes('"exclude_document_ids":["d1"]')).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries similarity checks on transient 503 failures', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(json({ error: 'AI Service Error', detail: 'unavailable' }, 503))
+      .mockResolvedValueOnce(
+        json({
+          input_mode: 'text',
+          passages_scanned: 1,
+          chunks_scanned: 4,
+          matches: [],
+          exact_matches: [],
+          semantic_matches: [],
+          limitations: [],
+        }),
+      );
+
+    const result = await aiService.checkSimilarityText('idea text');
+
+    expect(result.input_mode).toBe('text');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry similarity checks on client errors such as 403', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      json({ error: 'Access Denied', detail: 'You do not have access.' }, 403),
+    );
+
+    const error = await aiService
+      .checkSimilarityText('idea text')
+      .catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(403);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('keeps plagiarism assessment on its own endpoint', async () => {
@@ -213,6 +249,56 @@ describe('AI service — Django contracts', () => {
 
     expect(lastCall().url).toContain('ai/plagiarism/assess/');
     expect(result.status).toBe('review_required');
+  });
+
+  it('retrieves extracted document text with page mappings', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      json({
+        document_id: 'doc-1',
+        backend_thesis_id: 'tmp-pdf-abc',
+        pages: [
+          {
+            page_number: 1,
+            text: 'Extracted page one text.',
+            char_offset_start: 0,
+            char_offset_end: 24,
+            is_scanned: false,
+          },
+          {
+            page_number: 2,
+            text: 'Extracted page two text.',
+            char_offset_start: 25,
+            char_offset_end: 49,
+            is_scanned: false,
+          },
+        ],
+        total_characters: 48,
+        total_pages: 2,
+      }),
+    );
+
+    const result = await aiService.getDocumentText('doc-1');
+
+    const { url } = lastCall();
+    expect(url).toContain('ai/documents/doc-1/text/');
+    expect(result.document_id).toBe('doc-1');
+    expect(result.backend_thesis_id).toBe('tmp-pdf-abc');
+    expect(result.total_pages).toBe(2);
+    expect(result.total_characters).toBe(48);
+    expect(result.pages[0].page_number).toBe(1);
+    expect(result.pages[0].text).toBe('Extracted page one text.');
+    expect(result.pages[1].page_number).toBe(2);
+  });
+
+  it('deletes a temporary document after a similarity check', async () => {
+    fetchSpy.mockResolvedValueOnce(json({ detail: 'Document doc-1 deleted.' }));
+
+    const result = await aiService.deleteAIDocument('doc-1');
+
+    const { url, init } = lastCall();
+    expect(url).toContain('ai/documents/doc-1/');
+    expect(init.method).toBe('DELETE');
+    expect(result.detail).toBe('Document doc-1 deleted.');
   });
 
   it('requests topic analysis from the Django aggregation route', async () => {
