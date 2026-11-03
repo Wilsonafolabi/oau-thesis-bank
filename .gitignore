@@ -10,3 +10,10 @@ build/
 .vscode/
 media/
 docker-compose.override.yml
+
+# Local AI artifacts and generated data
+/AI Intelligence/*.zip
+/AI Intelligence/Research intelligence v2/src/oau_ai/api/routes.py.bak
+/AI Intelligence/Research intelligence v2/src/oau_ai_v2.egg-info/
+/AI Intelligence/Research intelligence v2/storage/
+/models/
