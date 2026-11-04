@@ -75,11 +75,12 @@ services:
       POSTGRES_DB: oau_thesis_bank
       POSTGRES_USER: oau
       POSTGRES_PASSWORD: oau
-      STORAGE_PROVIDER: minio
-      STORAGE_ENDPOINT_URL: http://minio:9000
-      STORAGE_ACCESS_KEY: oau
-      STORAGE_SECRET_KEY: oau-thesis-secret
-      STORAGE_BUCKET_NAME: oau-thesis-bank
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+      STORAGE_ENDPOINT_URL: ${STORAGE_ENDPOINT_URL:-http://minio:9000}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-oau}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-oau-thesis-secret}
+      STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME:-oau-thesis-bank}
+      STORAGE_REGION: ${STORAGE_REGION:-}
       EMAIL_HOST: ""
       EMAIL_PORT: "1025"
 
