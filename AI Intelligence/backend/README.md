@@ -47,8 +47,9 @@ Stop everything with `docker compose down` (volumes persist; wipe data with `doc
 
 ## Configuration
 
-All settings have sane dev defaults — override via environment variables in `docker-compose.yml`
-(or your own `compose.override.yml`).
+All settings have sane dev defaults. Docker Compose interpolates overrides from `backend/.env`
+(or the shell environment) at `docker compose` time, so you can point storage at R2 without
+editing the compose file.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -64,6 +65,10 @@ All settings have sane dev defaults — override via environment variables in `d
 | `STORAGE_REGION` | `auto` (R2) / `us-east-1` (MinIO) | leave blank for the provider default |
 | `EMAIL_BACKEND` | console | `django.core.mail.backends.console.EmailBackend` in dev |
 | `EMAIL_NOTIFICATIONS_ENABLED` | off | set `1` to fan out notifications by email |
+
+To use Cloudflare R2 in the Compose stack, set `STORAGE_PROVIDER=r2` plus the R2
+`STORAGE_ENDPOINT_URL` / keys / bucket / region in `backend/.env`; MinIO stays the default when
+those variables are unset.
 
 ## Common tasks
 
