@@ -38,6 +38,8 @@ export interface Thesis {
   status: ThesisStatus;
   access_policy: AccessPolicy;
   file: string | null;
+  views?: number;
+  downloads?: number;
   processing_status: ProcessingStatus;
   created_at: string;
   updated_at: string;

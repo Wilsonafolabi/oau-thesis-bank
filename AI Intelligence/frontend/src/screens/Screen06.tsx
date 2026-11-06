@@ -10,6 +10,7 @@ const fieldClassName = 'w-full rounded-md border border-slate-300 bg-white px-3 
 const Screen06SearchResults = () => {
   const { navigate, currentScreen, user } = useAppRouter();
   const routeQuery = String(currentScreen.params?.q || '');
+  const routeScope = String(currentScreen.params?.scope || '');
   const routeDepartment = String(currentScreen.params?.department || '');
   const routeFaculty = String(currentScreen.params?.faculty || '');
   const routeYear = String(currentScreen.params?.year || '');
@@ -23,8 +24,8 @@ const Screen06SearchResults = () => {
   const [savedIds, setSavedIds] = useState<number[]>([]);
   const [actionError, setActionError] = useState('');
   const { data, loading, error, refetch } = useApi(
-    () => searchTheses({ q: routeQuery, department: routeDepartment, faculty: routeFaculty, year: routeYear, tag: routeTag }),
-    [routeQuery, routeDepartment, routeFaculty, routeYear, routeTag],
+    () => searchTheses({ q: routeQuery, scope: routeScope, department: routeDepartment, faculty: routeFaculty, year: routeYear, tag: routeTag }),
+    [routeQuery, routeScope, routeDepartment, routeFaculty, routeYear, routeTag],
     true,
   );
   const results = data?.results || [];
@@ -39,7 +40,7 @@ const Screen06SearchResults = () => {
 
   const applyFilters = (event: React.FormEvent) => {
     event.preventDefault();
-    navigate('search-results', { q: draftQuery.trim(), department: department.trim(), faculty: faculty.trim(), year: year.trim(), tag: tag.trim() });
+    navigate('search-results', { q: draftQuery.trim(), scope: routeScope, department: department.trim(), faculty: faculty.trim(), year: year.trim(), tag: tag.trim() });
   };
 
   const toggleSave = async (event: React.MouseEvent, id: number, currentlySaved: boolean) => {
@@ -78,7 +79,7 @@ const Screen06SearchResults = () => {
         </form>
 
         <div className="min-w-0 flex-1">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4"><p className="text-sm text-slate-600">Showing <strong>{data?.count ?? 0}</strong> results{routeQuery && <> for <span className="font-medium text-slate-900">“{routeQuery}”</span></>}</p><button className="text-sm font-medium text-[#00502F] hover:text-[#003d24]" onClick={() => navigate('advanced-search')}>Advanced search</button></div>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4"><p className="text-sm text-slate-600">Showing <strong>{data?.count ?? 0}</strong> {routeScope === 'title' ? 'title matches' : 'results'}{routeQuery && <> for <span className="font-medium text-slate-900">“{routeQuery}”</span></>}</p><button className="text-sm font-medium text-[#00502F] hover:text-[#003d24]" onClick={() => navigate('advanced-search')}>Advanced search</button></div>
           {actionError && <p className="mb-4 text-sm text-red-600" role="alert">{actionError}</p>}
           {loading && <LoadingState label="Searching the repository…" />}
           {error && <ErrorState onRetry={() => void refetch()} />}
