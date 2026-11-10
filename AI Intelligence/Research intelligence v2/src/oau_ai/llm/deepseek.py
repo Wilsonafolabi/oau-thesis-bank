@@ -118,8 +118,10 @@ class DeepSeekProvider:
                 "deepseek", f"upstream error (HTTP {resp.status_code})"
             )
         if resp.status_code >= 400:
+            detail = resp.text.strip()[:500] or "empty response body"
             raise ProviderError(
-                "deepseek", f"request rejected (HTTP {resp.status_code})"
+                "deepseek",
+                f"request rejected (HTTP {resp.status_code}): {detail}",
             )
 
     def _backoff(self, attempt: int, err: ProviderError) -> float:

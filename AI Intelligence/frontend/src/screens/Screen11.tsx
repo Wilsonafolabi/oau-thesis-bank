@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
 import { Button, PublicOrAuthenticatedLayout, useAppRouter } from '../components/shared';
 import { useApi } from '../hooks/useApi';
 import { apiErrorMessage, downloadThesis, getThesis } from '../lib/api';
-import AIInsightsDashboard from '../components/AIInsightsDashboard'; // <-- AI Component Added
+import AIInsightsDashboard from '../components/AIInsightsDashboard';
 
 const Screen11PdfReader = () => {
   const { currentScreen, navigate } = useAppRouter();
@@ -124,8 +124,7 @@ const Screen11PdfReader = () => {
             </div>
           </div>
           
-          {/* Note: In production, replace "student_1" with the actual logged-in user's ID from your auth context */}
-          <AIInsightsDashboard userId="student_1" />
+          <AIInsightsDashboard />
         </div>
 
       </div>

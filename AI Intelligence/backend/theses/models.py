@@ -56,6 +56,7 @@ class Thesis(models.Model):
     processing_status = models.CharField(
         max_length=20, choices=ProcessingStatus.choices, default=ProcessingStatus.NONE
     )
+    ai_job_id = models.CharField(max_length=100, blank=True, default="")
     # Denormalized search data (kept in sync by theses.signals).
     tags_text = models.TextField(blank=True, default="")
     search_vector = SearchVectorField(null=True, editable=False)

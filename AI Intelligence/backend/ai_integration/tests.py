@@ -297,3 +297,168 @@ class AIIntegrationPermissionTests(TestCase):
                 format="json",
             )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class AIThesisQAAuthTests(TestCase):
+    """Authentication and authorization tests for the Thesis Q&A endpoint."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user_a = User.objects.create_user(
+            email="qa-user-a@example.com",
+            password="testpass123",
+            role="student",
+            department="Computer Science",
+        )
+        self.user_b = User.objects.create_user(
+            email="qa-user-b@example.com",
+            password="testpass123",
+            role="student",
+            department="Physics",
+        )
+        self.admin = User.objects.create_user(
+            email="qa-admin@example.com",
+            password="testpass123",
+            role="admin",
+            department="Administration",
+        )
+
+        self.public_thesis = Thesis.objects.create(
+            title="Public Q&A Thesis",
+            author="Author",
+            owner=self.user_a,
+            department="Computer Science",
+            faculty="Science",
+            year=2024,
+            abstract="Public abstract.",
+            supervisor="Dr. S",
+            status=Thesis.Status.PUBLISHED,
+            access_policy=Thesis.AccessPolicy.PUBLIC,
+        )
+
+        self.private_thesis = Thesis.objects.create(
+            title="Private Q&A Thesis",
+            author="Author",
+            owner=self.user_a,
+            department="Computer Science",
+            faculty="Science",
+            year=2024,
+            abstract="Private abstract.",
+            supervisor="Dr. S",
+            status=Thesis.Status.PUBLISHED,
+            access_policy=Thesis.AccessPolicy.PRIVATE,
+        )
+
+        self.qa_response = {
+            "answer": "This is the answer.",
+            "citations": [],
+            "confidence": 0.9,
+            "decision_engine": "deepseek",
+            "llm_tier": 1,
+            "trace_id": "trace-123",
+            "request_id": "req-123",
+            "insufficient_evidence": False,
+            "message": None,
+        }
+
+    def _qa_payload(self, thesis_id, question="What is this about?"):
+        return {
+            "backend_thesis_id": str(thesis_id),
+            "question": question,
+            "scope": "this_thesis",
+            "top_k": 5,
+        }
+
+    def test_authentication_required(self):
+        """Unauthenticated requests to Q&A return 401."""
+        url = reverse("ai-thesis-qa-ask")
+        response = self.client.post(url, self._qa_payload(self.public_thesis.id), format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def _qa_post(self, thesis_id, question="What is this about?", user=None, status_code=200):
+        """Helper: authenticate, post Q&A request with mocked V2 + document resolve."""
+        if user:
+            self.client.force_authenticate(user=user)
+        url = reverse("ai-thesis-qa-ask")
+        with patch("ai_integration.views.resolve_document_to_thesis", side_effect=lambda x: str(x)):
+            with patch("ai_integration.views.forward_to_v2") as mock_forward:
+                mock_forward.return_value = self.qa_response
+                response = self.client.post(
+                    url, self._qa_payload(thesis_id, question), format="json"
+                )
+        self.assertEqual(response.status_code, status_code)
+        return response, mock_forward
+
+    def test_owner_can_query_public_thesis(self):
+        """Owner can query their own public thesis."""
+        self._qa_post(self.public_thesis.id, user=self.user_a)
+
+    def test_owner_can_query_private_thesis(self):
+        """Owner can query their own private thesis."""
+        self._qa_post(self.private_thesis.id, user=self.user_a)
+
+    def test_other_user_cannot_query_private_thesis(self):
+        """User B receives 403 when querying User A's private thesis."""
+        self.client.force_authenticate(user=self.user_b)
+        url = reverse("ai-thesis-qa-ask")
+        with patch("ai_integration.views.resolve_document_to_thesis", side_effect=lambda x: str(x)):
+            with patch("ai_integration.views.forward_to_v2") as mock_forward:
+                mock_forward.return_value = self.qa_response
+                response = self.client.post(
+                    url, self._qa_payload(self.private_thesis.id), format="json"
+                )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_forward.assert_not_called()
+
+    def test_other_user_can_query_public_thesis(self):
+        """User B can query a public thesis owned by User A."""
+        self._qa_post(self.public_thesis.id, user=self.user_b)
+
+    def test_unknown_thesis_id_returns_403(self):
+        """Unknown thesis ID returns 403 (not 404, to avoid leaking existence)."""
+        self.client.force_authenticate(user=self.user_a)
+        url = reverse("ai-thesis-qa-ask")
+        with patch("ai_integration.services.forward_to_v2") as mock_forward:
+            mock_forward.return_value = self.qa_response
+            response = self.client.post(
+                url, self._qa_payload(999999), format="json"
+            )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_forward.assert_not_called()
+    def test_missing_question_returns_400(self):
+        """Missing question returns 400."""
+        self.client.force_authenticate(user=self.user_a)
+        url = reverse("ai-thesis-qa-ask")
+        payload = {"backend_thesis_id": str(self.public_thesis.id)}
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_empty_question_returns_400(self):
+        """Empty question returns 400."""
+        self.client.force_authenticate(user=self.user_a)
+        url = reverse("ai-thesis-qa-ask")
+        payload = {"backend_thesis_id": str(self.public_thesis.id), "question": ""}
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_admin_can_query_private_thesis(self):
+        """Admin can query any thesis including private ones owned by others."""
+        self._qa_post(self.private_thesis.id, user=self.admin)
+
+    def test_user_jwt_not_forwarded_to_v2(self):
+        """The user's JWT Authorization header is NOT forwarded to V2."""
+        self.client.force_authenticate(user=self.user_a)
+        url = reverse("ai-thesis-qa-ask")
+        with patch("ai_integration.views.resolve_document_to_thesis", side_effect=lambda x: str(x)):
+            with patch("ai_integration.views.forward_to_v2") as mock_forward:
+                mock_forward.return_value = self.qa_response
+                self.client.post(
+                    url,
+                    self._qa_payload(self.public_thesis.id),
+                    format="json",
+                    HTTP_AUTHORIZATION="Bearer fake-user-jwt",
+                )
+        _, kwargs = mock_forward.call_args
+        internal_token = kwargs.get("internal_token", "")
+        self.assertEqual(internal_token, "test-token")
+        self.assertNotIn("fake-user-jwt", str(internal_token))

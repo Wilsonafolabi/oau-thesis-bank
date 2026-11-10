@@ -88,6 +88,41 @@ class DocumentAuthorizationTests(APITestCase):
         _, kwargs = forward.call_args
         self.assertEqual(kwargs["data"]["backend_user_id"], str(self.owner.id))
 
+    def test_owner_can_upload_temporary_pdf_without_thesis_access(self):
+        _login(self.client, self.owner.email)
+        temporary_id = "tmp-pdf-00000000-0000-4000-8000-000000000001"
+        with patch("ai_integration.views.forward_to_v2", return_value=V2_UPLOAD_OK) as forward:
+            response = self.client.post(
+                "/api/ai/documents/upload/",
+                {"backend_thesis_id": temporary_id, "file": self._file()},
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, 202)
+        _, kwargs = forward.call_args
+        self.assertEqual(kwargs["data"]["backend_thesis_id"], temporary_id)
+        self.assertEqual(kwargs["data"]["backend_user_id"], str(self.owner.id))
+        self.assertEqual(kwargs["data"]["access_level"], "private")
+
+    def test_temporary_upload_ignores_client_user_and_access_level(self):
+        _login(self.client, self.other.email)
+        with patch("ai_integration.views.forward_to_v2", return_value=V2_UPLOAD_OK) as forward:
+            response = self.client.post(
+                "/api/ai/documents/upload/",
+                {
+                    "backend_thesis_id": "tmp-pdf-00000000-0000-4000-8000-000000000002",
+                    "backend_user_id": str(self.owner.id),
+                    "access_level": "public",
+                    "file": self._file(),
+                },
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, 202)
+        _, kwargs = forward.call_args
+        self.assertEqual(kwargs["data"]["backend_user_id"], str(self.other.id))
+        self.assertEqual(kwargs["data"]["access_level"], "private")
+
     def test_admin_can_upload(self):
         _login(self.client, self.admin.email)
         with patch("ai_integration.views.forward_to_v2", return_value=V2_UPLOAD_OK):
@@ -100,10 +135,26 @@ class DocumentAuthorizationTests(APITestCase):
 
     def test_unrelated_user_cannot_delete(self):
         _login(self.client, self.other.email)
-        with patch("ai_integration.views.forward_to_v2") as forward:
+        with patch(
+            "ai_integration.views.resolve_document_to_thesis",
+            return_value=str(self.thesis.id),
+        ), patch("ai_integration.views.forward_to_v2") as forward:
             response = self.client.delete(f"/api/ai/documents/{self.thesis.id}/")
         self.assertEqual(response.status_code, 403)
         forward.assert_not_called()
+
+    def test_temporary_document_delete_is_forwarded_for_v2_owner_check(self):
+        _login(self.client, self.owner.email)
+        with patch(
+            "ai_integration.views.resolve_document_to_thesis",
+            return_value="tmp-pdf-00000000-0000-4000-8000-000000000001",
+        ), patch("ai_integration.views.forward_to_v2", return_value={"detail": "deleted"}) as forward:
+            response = self.client.delete("/api/ai/documents/document-uuid/")
+
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = forward.call_args
+        self.assertEqual(kwargs["path"], "/api/v2/documents/document-uuid")
+        self.assertEqual(kwargs["actor_context"]["user_id"], str(self.owner.id))
 
     def test_job_status_forwards_authenticated_actor(self):
         _login(self.client, self.other.email)

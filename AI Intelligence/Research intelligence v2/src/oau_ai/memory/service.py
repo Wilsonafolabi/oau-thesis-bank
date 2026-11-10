@@ -59,7 +59,7 @@ from ..db.models import (
 )
 from ..db.session import get_session_factory as AsyncSessionLocal
 from ..embeddings.service import EmbeddingService
-from ..embeddings.vectorize import VectorizeService
+from ..embeddings.vectorize import VectorizeService, metadata_in_filter
 from ..errors import ConfigurationError, Phase3Error, ProviderUnavailableError
 from ..llm.router import complete_with_deepseek, get_router
 from ..retrieval.service import RetrievalService
@@ -649,15 +649,23 @@ class MemoryService:
             ][:8]
             digests: List[str] = []
             for batch in batches:
-                digests.append(await self._llm_text(self._DIGEST_PROMPT, batch))
+                digests.append(
+                    await self._llm_text(
+                        self._DIGEST_PROMPT, batch, json_mode=False
+                    )
+                )
             text = "\n\n".join(digests)
 
         raw = await self._llm_text(
-            self._SUMMARY_PROMPT, f"Text:\n{text}\n\nReturn the JSON object."
+            self._SUMMARY_PROMPT,
+            f"Text:\n{text}\n\nReturn the JSON object.",
+            json_mode=True,
         )
         return self._parse_summary(raw)
 
-    async def _llm_text(self, system_prompt: str, user_content: str) -> str:
+    async def _llm_text(
+        self, system_prompt: str, user_content: str, json_mode: bool
+    ) -> str:
         """Single provider call. Failures propagate — never a silent empty."""
         response = complete_with_deepseek(
             [
@@ -666,7 +674,7 @@ class MemoryService:
             ],
             max_tokens=1024,
             temperature=0.1,
-            json_mode=True,
+            json_mode=json_mode,
         )
         return response.content
 
@@ -1001,12 +1009,7 @@ class MemoryService:
                 vector_results = self.vectorize_service.query(
                     vector=embedding_result.vector,
                     top_k=top_k * 2,
-                    filter={
-                        "$in": {
-                            "field": "user_id",
-                            "value": [user_id],
-                        }
-                    },
+                    filter=metadata_in_filter("user_id", [user_id]),
                 )
                 matches = vector_results.get("result", {}).get("matches", [])
                 for match in matches[:top_k]:

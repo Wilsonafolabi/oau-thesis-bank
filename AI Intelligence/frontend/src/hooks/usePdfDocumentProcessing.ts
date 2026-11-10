@@ -54,7 +54,7 @@ interface UsePdfDocumentProcessingReturn {
     extractablePages: number;
     scannedPages: number;
   } | null;
-  processPdf: () => Promise<void>;
+  processPdf: () => Promise<unknown | null>;
   cleanup: () => Promise<void>;
   reset: () => void;
 }
@@ -176,13 +176,13 @@ export const usePdfDocumentProcessing = (
     []
   );
 
-  const processPdf = useCallback(async (): Promise<void> => {
-    if (!file) return;
+  const processPdf = useCallback(async (): Promise<unknown | null> => {
+    if (!file) return null;
 
     const validationError = validatePdfFile(file);
     if (validationError) {
       setPdfError(validationError);
-      return;
+      return null;
     }
 
     setPdfError('');
@@ -248,6 +248,7 @@ export const usePdfDocumentProcessing = (
 
       setStage('complete');
       setProgress('Analysis complete.');
+      return analysisResult;
     } catch (err) {
       if (err instanceof Error) {
         setPdfError(err.message);
@@ -255,6 +256,7 @@ export const usePdfDocumentProcessing = (
         setPdfError('PDF processing failed.');
       }
       setStage('idle');
+      return null;
     } finally {
       await cleanup();
       setProgress('');

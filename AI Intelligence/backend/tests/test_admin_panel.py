@@ -1,12 +1,23 @@
 from django.core.files.base import ContentFile
+from django.contrib import admin
+from django.test import RequestFactory, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
+from unittest.mock import patch
 
 from accounts.models import User
 from admin_panel.models import AuditEvent, ModerationItem
 from theses.models import Thesis
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+)
 class AdminPanelTestCase(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
@@ -83,6 +94,68 @@ class AdminPanelTestCase(APITestCase):
             self.assertIn(key, response.data)
         self.assertEqual(response.data["total_theses"], 1)
         self.assertEqual(response.data["health"]["db"], "ok")
+
+    def test_admin_can_index_existing_published_pdf(self):
+        from io import BytesIO
+
+        from theses.admin import ThesisAdmin
+
+        request = RequestFactory().post("/")
+        request.user = self.admin
+        model_admin = ThesisAdmin(Thesis, admin.site)
+        queryset = Thesis.objects.filter(pk=self.thesis.pk)
+
+        with (
+            patch("theses.admin.get_internal_service_token", return_value="internal"),
+            patch("theses.admin.forward_to_v2", return_value={"job_id": "job-123"}) as forward,
+            patch.object(ThesisAdmin, "message_user") as message_user,
+            patch.object(self.thesis.file, "open", return_value=BytesIO(b"%PDF-1.4 test")),
+        ):
+            model_admin.index_with_ai(request, queryset)
+
+        kwargs = forward.call_args.kwargs
+        self.assertEqual(kwargs["path"], "/api/v2/documents/upload")
+        self.assertEqual(kwargs["data"]["backend_thesis_id"], str(self.thesis.id))
+        self.assertEqual(kwargs["data"]["backend_user_id"], str(self.student.id))
+        self.assertEqual(kwargs["actor_context"]["user_id"], str(self.student.id))
+        self.assertEqual(
+            kwargs["files"]["file"][0],
+            self.thesis.file.name.rsplit("/", 1)[-1],
+        )
+        self.assertEqual(kwargs["files"]["file"][2], "application/pdf")
+        self.thesis.refresh_from_db()
+        self.assertEqual(self.thesis.processing_status, Thesis.ProcessingStatus.QUEUED)
+        self.assertEqual(self.thesis.ai_job_id, "job-123")
+        message_user.assert_called_once()
+
+    def test_admin_can_refresh_ai_index_status(self):
+        from theses.admin import ThesisAdmin
+
+        self.thesis.ai_job_id = "job-123"
+        self.thesis.processing_status = Thesis.ProcessingStatus.QUEUED
+        self.thesis.save(update_fields=["ai_job_id", "processing_status"])
+        request = RequestFactory().post("/")
+        request.user = self.admin
+        model_admin = ThesisAdmin(Thesis, admin.site)
+        queryset = Thesis.objects.filter(pk=self.thesis.pk)
+
+        with (
+            patch("theses.admin.get_internal_service_token", return_value="internal"),
+            patch(
+                "theses.admin.forward_to_v2",
+                return_value={"job_id": "job-123", "status": "success"},
+            ) as forward,
+            patch.object(ThesisAdmin, "message_user") as message_user,
+        ):
+            model_admin.refresh_ai_index_status(request, queryset)
+
+        self.assertEqual(
+            forward.call_args.kwargs["path"],
+            "/api/v2/documents/jobs/job-123",
+        )
+        self.thesis.refresh_from_db()
+        self.assertEqual(self.thesis.processing_status, Thesis.ProcessingStatus.COMPLETED)
+        message_user.assert_called_once()
 
     def test_flag_thesis_creates_moderation_item(self):
         self.auth(self.faculty)

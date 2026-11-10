@@ -1,35 +1,65 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { detectGaps, getRecommendations } from '../services/aiService';
+import { Lightbulb } from 'lucide-react';
+import { Button } from './shared';
+import { getMyProfile } from '../lib/api';
+import { detectResearchGaps, getRecommendations } from '../services/aiService';
 import type { Recommendation, ResearchGap } from '../services/aiService';
 
-const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
+const AIInsightsDashboard: React.FC = () => {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [recommendationNote, setRecommendationNote] = useState<string | null>(null);
   const [gaps, setGaps] = useState<ResearchGap[]>([]);
+  const [gapTopic, setGapTopic] = useState('');
+  const [gapLoading, setGapLoading] = useState(false);
+  const [gapMessage, setGapMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const [gapList, recs] = await Promise.all([
-          detectGaps(),
-          getRecommendations({ top_k: 5 }),
-        ]);
-        setGaps(gapList);
+        const profile = await getMyProfile().catch(() => null);
+        const interests = profile?.research_interests?.trim() || '';
+        if (cancelled) return;
+        setGapTopic(interests);
+
+        const recs = await getRecommendations({ query: interests || undefined, top_k: 5 });
+        if (cancelled) return;
         setRecommendations(recs.recommendations);
         setRecommendationNote(recs.insufficient_evidence ? recs.message : null);
       } catch (err) {
         console.error("Failed to load AI insights:", err);
-        setError("Unable to load AI insights. Please ensure the backend and AI service are running.");
+        if (!cancelled) setError("Unable to load AI insights. Please ensure the backend and AI service are running.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    loadData();
-  }, [userId]);
+    void loadData();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleFindGaps = async () => {
+    const topic = gapTopic.trim();
+    if (!topic) return;
+
+    setGapLoading(true);
+    setGapMessage(null);
+    setGaps([]);
+    try {
+      const response = await detectResearchGaps({ research_question: topic, top_k: 5 });
+      setGaps(response.gaps || []);
+      if (response.insufficient_evidence || !response.gaps?.length) {
+        setGapMessage(response.message || 'There is not enough indexed thesis evidence to identify gaps for this topic.');
+      }
+    } catch (err) {
+      setGapMessage(err instanceof Error ? err.message : 'Gap analysis failed.');
+    } finally {
+      setGapLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -106,13 +136,33 @@ const AIInsightsDashboard: React.FC<{ userId: string }> = ({ userId }) => {
       {/* Research Gaps Section */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <span className="text-purple-500">??</span> Research Gaps
+          <Lightbulb className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" /> Research Gaps
         </h2>
+        <form
+          className="mb-4 flex flex-col gap-2 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleFindGaps();
+          }}
+        >
+          <input
+            aria-label="Research topic for gap analysis"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+            onChange={(event) => setGapTopic(event.target.value)}
+            placeholder="Enter a research topic"
+            value={gapTopic}
+          />
+          <Button disabled={gapLoading || !gapTopic.trim()} size="sm" type="submit">
+            {gapLoading ? 'Analyzing…' : 'Find gaps'}
+          </Button>
+        </form>
+        {gapMessage && gaps.length > 0 && <p className="mb-3 text-sm text-amber-700">{gapMessage}</p>}
         {gaps.length === 0 ? (
           <div className="text-center py-8">
             <div className="text-4xl mb-2"></div>
-            <p className="text-gray-500 dark:text-gray-400">No significant research gaps detected yet.</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Upload more theses to enable gap detection analysis.</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              {gapMessage || 'Enter a topic to compare it with accessible, AI-indexed theses.'}
+            </p>
           </div>
         ) : (
           <ul className="space-y-3 max-h-96 overflow-y-auto">

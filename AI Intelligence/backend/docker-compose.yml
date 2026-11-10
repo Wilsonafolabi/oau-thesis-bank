@@ -97,6 +97,7 @@
       POSTGRES_DB: oau_thesis_bank
       POSTGRES_USER: oau
       POSTGRES_PASSWORD: oau
+      AI_SERVICE_URL: http://host.docker.internal:8888
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
       STORAGE_ENDPOINT_URL: ${STORAGE_ENDPOINT_URL:-http://minio:9000}
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-oau}

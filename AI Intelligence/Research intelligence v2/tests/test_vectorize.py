@@ -2,7 +2,7 @@
 
 import pytest
 
-from oau_ai.embeddings.vectorize import VectorizeService
+from oau_ai.embeddings.vectorize import VectorizeService, metadata_in_filter
 
 
 class MockTransport:
@@ -88,4 +88,10 @@ def test_vectorize_index_url_format():
     service = VectorizeService(config=config)
     expected = "https://api.cloudflare.com/client/v4/accounts/acct-123/vectorize/v2/indexes/my-index"
     assert service.config.index_url == expected
+
+
+def test_metadata_in_filter_nests_operator_under_field():
+    assert metadata_in_filter("document_id", ["doc-1", "doc-2"]) == {
+        "document_id": {"$in": ["doc-1", "doc-2"]}
+    }
 

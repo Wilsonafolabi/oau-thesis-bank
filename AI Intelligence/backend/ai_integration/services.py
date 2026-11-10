@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 
 import requests
 from django.conf import settings
+from django.db import connection
 
 from accounts.models import User
 from theses.models import Thesis
@@ -97,9 +98,28 @@ def check_thesis_access(thesis_id: str, user: User) -> bool:
     """
     try:
         thesis = Thesis.objects.get(id=thesis_id)
-    except Thesis.DoesNotExist:
+    except (Thesis.DoesNotExist, ValueError, TypeError):
         return False
     return thesis.can_view(user)
+
+
+def resolve_document_to_thesis(document_id: str) -> Optional[str]:
+    """Resolve a V2 document UUID to its Django Thesis primary key.
+
+    Queries the shared ai_intelligence.ai_documents table to map a V2
+    document UUID (AIDocument.id) to the Django Thesis primary key
+    (AIDocument.backend_thesis_id).
+
+    Returns the backend_thesis_id string if the document exists,
+    None otherwise.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT backend_thesis_id FROM ai_intelligence.ai_documents WHERE id = %s",
+            [document_id],
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
 
 
 def check_thesis_write_access(thesis_id: str, user: User) -> bool:

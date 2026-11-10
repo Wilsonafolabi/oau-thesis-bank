@@ -15,6 +15,7 @@ Groq is never used as a fallback when DeepSeek fails.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import uuid
@@ -25,7 +26,7 @@ from ..auth.middleware import ActorContext
 from ..db.models import AIDocument, AIChunk
 from ..db.session import get_session_factory as AsyncSessionLocal
 from ..embeddings.service import EmbeddingService
-from ..embeddings.vectorize import VectorizeService
+from ..embeddings.vectorize import VectorizeService, metadata_in_filter
 from ..errors import (
     GuardrailError,
     Phase3Error,
@@ -462,12 +463,7 @@ class RAGService:
             filter_metadata = {}
             if accessible_ids:
                 # Filter by accessible document IDs.
-                filter_metadata = {
-                    "$in": {
-                        "field": "document_id",
-                        "value": accessible_ids,
-                    }
-                }
+                filter_metadata = metadata_in_filter("document_id", accessible_ids)
 
             result = self.vectorize_service.query(
                 vector=query_vector,
@@ -542,7 +538,8 @@ class RAGService:
         user_prompt = "\n\n".join(user_prompt_parts)
 
         # DeepSeek is the primary provider — no fallback.
-        response = complete_with_deepseek(
+        response = await asyncio.to_thread(
+            complete_with_deepseek,
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -21,7 +21,6 @@ const Screen24IdeaExtension = () => {
     pdfError,
     stage: pdfStage,
     progress: pdfProgress,
-    result: pdfResult,
     isBusy: pdfBusy,
     processPdf: processPdfAnalysis,
     reset: resetPdf,
@@ -53,13 +52,13 @@ const Screen24IdeaExtension = () => {
     if (!file) return;
     setError('');
     setResult(null);
-    await processPdfAnalysis();
+    const nextResult = await processPdfAnalysis();
     if (
-      pdfResult &&
-      typeof pdfResult === 'object' &&
-      'extended_idea' in pdfResult
+      nextResult &&
+      typeof nextResult === 'object' &&
+      'extended_idea' in nextResult
     ) {
-      setResult(pdfResult as IdeaExtensionResponse);
+      setResult(nextResult as IdeaExtensionResponse);
     }
   };
 
@@ -160,6 +159,12 @@ const Screen24IdeaExtension = () => {
                   </Button>
                 )}
               </div>
+              <Button
+                disabled={isTextBusy || !file}
+                onClick={handlePdfRun}
+              >
+                {pdfBusy ? 'Analyzing PDF…' : 'Generate extensions'}
+              </Button>
               {pdfError && (
                 <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
                   {pdfError}

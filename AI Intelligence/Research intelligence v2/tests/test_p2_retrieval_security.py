@@ -4,7 +4,8 @@ Unit tests with mocked database sessions and mocked providers. No network,
 no model downloads, no paid calls.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+import threading
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -304,6 +305,33 @@ def _rag_service(
         side_effect=Exception("memory unavailable")
     )
     return service
+
+
+@pytest.mark.asyncio
+async def test_rag_deepseek_call_runs_off_event_loop_thread():
+    service = RAGService.__new__(RAGService)
+    caller_thread = threading.get_ident()
+    provider_threads = []
+
+    def fake_complete(*args, **kwargs):
+        provider_threads.append(threading.get_ident())
+        return MagicMock(
+            content="Crop rotation improves soil nitrogen [Source 1].",
+            model="deepseek-chat",
+            provider="deepseek",
+        )
+
+    with patch(
+        "oau_ai.rag.service.complete_with_deepseek", side_effect=fake_complete
+    ):
+        await service._generate_answer(
+            "What does the thesis say?",
+            [_retrieved("c1", text="Crop rotation improves soil nitrogen.")],
+            "trace-1",
+        )
+
+    assert provider_threads
+    assert provider_threads[0] != caller_thread
 
 
 @pytest.mark.asyncio

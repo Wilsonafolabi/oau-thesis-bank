@@ -497,7 +497,7 @@ async def test_long_document_is_digested_in_batches():
     calls = []
 
     def fake_complete(messages, **kwargs):
-        calls.append(messages[-1]["content"])
+        calls.append((messages[-1]["content"], kwargs["json_mode"]))
         if len(calls) <= 2:
             return MagicMock(content="digest")
         return MagicMock(content=_summary_payload())
@@ -506,7 +506,9 @@ async def test_long_document_is_digested_in_batches():
         await service.generate_thesis_summary(_actor(), "thesis-1")
 
     assert len(calls) == 4  # three batch digests + one final extraction
-    assert len(calls[-1]) < len(long_text)
+    assert all(not json_mode for _, json_mode in calls[:-1])
+    assert calls[-1][1] is True
+    assert len(calls[-1][0]) < len(long_text)
 
 
 @pytest.mark.asyncio

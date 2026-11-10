@@ -26,19 +26,18 @@ def main() -> None:
         host=os.getenv("RI_HOST", "0.0.0.0"),
         port=int(os.getenv("RI_PORT", "8888")),
         log_level="info",
+        # Use asyncio event loop policy to avoid ProactorEventLoop on Windows,
+        # which psycopg async cannot use.
+        loop="asyncio",
     )
     server = uvicorn.Server(config)
 
     if os.name == "nt":
-        loop = asyncio.SelectorEventLoop()
-    else:
-        loop = asyncio.new_event_loop()
-
-    asyncio.set_event_loop(loop)
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     try:
-        loop.run_until_complete(server.serve())
+        asyncio.run(server.serve())
     finally:
-        loop.close()
+        pass
 
 
 if __name__ == "__main__":

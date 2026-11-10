@@ -30,7 +30,7 @@ from ..auth.middleware import ActorContext
 from ..db.models import AIDocument, AIChunk
 from ..db.session import get_session_factory as AsyncSessionLocal
 from ..embeddings.service import EmbeddingService
-from ..embeddings.vectorize import VectorizeService
+from ..embeddings.vectorize import VectorizeService, metadata_in_filter
 from ..errors import (
     ConfigurationError,
     GuardrailError,
@@ -398,12 +398,7 @@ class ResearchGapService:
         try:
             filter_metadata = {}
             if accessible_ids:
-                filter_metadata = {
-                    "$in": {
-                        "field": "document_id",
-                        "value": accessible_ids,
-                    }
-                }
+                filter_metadata = metadata_in_filter("document_id", accessible_ids)
 
             result = self.vectorize_service.query(
                 vector=query_vector,

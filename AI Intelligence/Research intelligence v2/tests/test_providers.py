@@ -95,6 +95,34 @@ def test_deepseek_provider_success_with_mock_transport():
     assert response.usage.total_tokens == 15
 
 
+def test_deepseek_bad_request_preserves_provider_diagnostic():
+    provider = DeepSeekProvider.__new__(DeepSeekProvider)
+    provider.config = type(
+        "C",
+        (),
+        {
+            "name": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "model": "deepseek-chat",
+            "api_key": "test-key",
+            "timeout_seconds": 5.0,
+            "max_tokens": 1024,
+            "temperature": 0.2,
+            "max_retries": 1,
+            "retry_backoff_seconds": 0.1,
+            "supports_response_format": True,
+        },
+    )()
+    provider._transport = _mock_transport(
+        400, {"error": {"message": "input exceeds context limit"}}
+    )
+
+    request = ChatRequest(messages=[ChatMessage(role="user", content="Hello")])
+    with pytest.raises(Exception, match="input exceeds context limit"):
+        provider.complete(request)
+
+
 def test_groq_provider_success_with_mock_transport():
     """Groq provider returns a ChatResponse on a successful mocked HTTP call."""
     provider = GroqProvider.__new__(GroqProvider)

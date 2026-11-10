@@ -17,6 +17,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -674,7 +676,8 @@ class IngestionService:
         """
         document = await self.db.execute(
             select(AIDocument).where(
-                AIDocument.backend_thesis_id == backend_thesis_id
+                (AIDocument.id == backend_thesis_id)
+                | (AIDocument.backend_thesis_id == backend_thesis_id)
             )
         )
         document = document.scalar_one_or_none()
@@ -701,7 +704,10 @@ class IngestionService:
         # Collect Vectorize point ids before the rows cascade away.
         point_ids = await self._collect_point_ids(document.id)
 
-        # Delete source file.
+        # Delete from Cloudflare R2 if object storage is configured.
+        await self._delete_from_r2(document.object_key)
+
+        # Delete source file from local storage.
         file_path = Path(document.object_key)
         if file_path.exists():
             file_path.unlink(missing_ok=True)
@@ -717,3 +723,64 @@ class IngestionService:
             backend_thesis_id,
             len(point_ids),
         )
+
+    async def _delete_from_r2(self, object_key: str) -> None:
+        """Delete an object from Cloudflare R2 if object storage is configured.
+
+        Reads R2 configuration from environment variables and deletes the
+        object using its stored key. Failures are logged but do not raise
+        — the local file deletion and database cleanup proceed regardless.
+        """
+        provider = os.getenv("STORAGE_PROVIDER", "local").lower()
+        if provider != "r2":
+            return
+
+        endpoint = os.getenv("OBJECT_STORAGE_ENDPOINT")
+        access_key = os.getenv("OBJECT_STORAGE_ACCESS_KEY")
+        secret_key = os.getenv("OBJECT_STORAGE_SECRET_KEY")
+        bucket = os.getenv("OBJECT_STORAGE_BUCKET_DOCUMENTS")
+        region = os.getenv("OBJECT_STORAGE_REGION", "auto")
+        use_ssl = os.getenv("OBJECT_STORAGE_USE_SSL", "true").lower() == "true"
+
+        if not all([endpoint, access_key, secret_key, bucket]):
+            logger.warning(
+                "R2 deletion skipped: incomplete configuration "
+                "(endpoint=%s, access_key=%s, secret_key=%s, bucket=%s)",
+                bool(endpoint),
+                bool(access_key),
+                bool(secret_key),
+                bool(bucket),
+            )
+            return
+
+        # Extract the object key from the stored path. The object_key may be
+        # a local filesystem path; use just the filename as the R2 key.
+        r2_key = Path(object_key).name
+
+        try:
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region,
+                use_ssl=use_ssl,
+            )
+            s3_client.delete_object(Bucket=bucket, Key=r2_key)
+            logger.info(
+                "Deleted R2 object %s/%s", bucket, r2_key
+            )
+        except (BotoCoreError, ClientError) as exc:
+            logger.warning(
+                "R2 deletion failed for %s/%s: %s",
+                bucket,
+                r2_key,
+                exc,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "R2 deletion failed unexpectedly for %s/%s: %s",
+                bucket,
+                r2_key,
+                exc,
+            )

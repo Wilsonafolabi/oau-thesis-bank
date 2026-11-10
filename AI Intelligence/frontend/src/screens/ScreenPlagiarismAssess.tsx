@@ -33,7 +33,6 @@ const ScreenPlagiarismAssess = () => {
     pdfError,
     stage: pdfStage,
     progress: pdfProgress,
-    result: pdfResult,
     isBusy: pdfBusy,
     processPdf: processPdfAnalysis,
     reset: resetPdf,
@@ -67,9 +66,9 @@ const ScreenPlagiarismAssess = () => {
     if (!file) return;
     setError('');
     setResult(null);
-    await processPdfAnalysis();
-    if (pdfResult && typeof pdfResult === 'object' && 'status' in pdfResult) {
-      setResult(pdfResult as PlagiarismResponse);
+    const nextResult = await processPdfAnalysis();
+    if (nextResult && typeof nextResult === 'object' && 'status' in nextResult) {
+      setResult(nextResult as PlagiarismResponse);
     }
   };
 
@@ -183,6 +182,12 @@ const ScreenPlagiarismAssess = () => {
                   </Button>
                 )}
               </div>
+              <Button
+                disabled={isTextBusy || !file}
+                onClick={handlePdfRun}
+              >
+                {pdfBusy ? 'Assessing PDF…' : 'Assess PDF'}
+              </Button>
               {pdfError && (
                 <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
                   {pdfError}

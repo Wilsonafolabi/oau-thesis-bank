@@ -89,8 +89,9 @@ describe('usePdfDocumentProcessing', () => {
       result.current.setFile(new File(['dummy'], 'test.pdf', { type: 'application/pdf' }));
     });
 
+    let processedResult: unknown = null;
     await act(async () => {
-      await result.current.processPdf();
+      processedResult = await result.current.processPdf();
     });
 
     // Upload called with a tmp-pdf- prefixed ID.
@@ -113,6 +114,7 @@ describe('usePdfDocumentProcessing', () => {
     // Final state.
     expect(result.current.stage).toBe('complete');
     expect(result.current.result).toEqual({ analysis: 'done' });
+    expect(processedResult).toEqual({ analysis: 'done' });
     expect(result.current.pdfError).toBe('');
     expect(result.current.isBusy).toBe(false);
   });

@@ -22,6 +22,11 @@ from ..errors import ConfigurationError, ProviderUnavailableError
 logger = logging.getLogger("oau_ai.vectorize")
 
 
+def metadata_in_filter(field: str, values: List[Any]) -> Dict[str, Any]:
+    """Build a Cloudflare Vectorize metadata membership filter."""
+    return {field: {"$in": list(values)}}
+
+
 class VectorizeService:
     """Client for a Cloudflare Vectorize index.
 
@@ -65,8 +70,13 @@ class VectorizeService:
                 component="vectorize",
             )
         if resp.status_code >= 400:
+            # Capture the response body for diagnostics — Cloudflare may
+            # include a specific error code/message in the body.
+            detail = resp.text[:500]
             raise ProviderUnavailableError(
-                message=f"Vectorize request rejected (HTTP {resp.status_code})",
+                message=(
+                    f"Vectorize request rejected (HTTP {resp.status_code}): {detail}"
+                ),
                 component="vectorize",
             )
 
@@ -200,6 +210,17 @@ class VectorizeService:
                 ),
                 component="vectorize",
             )
+        # Validate dimension against configured index dimension to catch
+        # mismatches before they reach Cloudflare as HTTP 400s.
+        if len(vector) != self.config.dimensions:
+            raise ProviderUnavailableError(
+                message=(
+                    f"Vector dimension mismatch: query vector has {len(vector)} "
+                    f"dimensions but index is configured for "
+                    f"{self.config.dimensions} dimensions."
+                ),
+                component="vectorize",
+            )
         url = self.config.index_url + "/query"
         payload: Dict[str, Any] = {
             "vector": vector,
@@ -239,6 +260,16 @@ class VectorizeService:
                 message=(
                     "Cloudflare Vectorize is not configured. Set VECTORIZE_API_TOKEN "
                     "and VECTORIZE_ACCOUNT_ID."
+                ),
+                component="vectorize",
+            )
+        # Validate dimension against configured index dimension.
+        if len(vector) != self.config.dimensions:
+            raise ProviderUnavailableError(
+                message=(
+                    f"Vector dimension mismatch: query vector has {len(vector)} "
+                    f"dimensions but index is configured for "
+                    f"{self.config.dimensions} dimensions."
                 ),
                 component="vectorize",
             )

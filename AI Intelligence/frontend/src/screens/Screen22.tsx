@@ -1,8 +1,9 @@
 ﻿import React, { useState } from 'react';
-import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
+import { AuthenticatedLayout, Button, useAppRouter } from '../components/shared';
+import { ArrowRight, FileText, Lightbulb, Upload } from 'lucide-react';
 import { ApiError } from '../lib/api';
 import { checkSimilarityText } from '../services/aiService';
-import { usePdfDocumentProcessing, type PdfStage } from '../hooks/usePdfDocumentProcessing';
+import { usePdfDocumentProcessing } from '../hooks/usePdfDocumentProcessing';
 import { SIMILARITY_REPORT_KEY } from './Screen23';
 
 const Screen22IdeaChecker = () => {
@@ -18,7 +19,6 @@ const Screen22IdeaChecker = () => {
     pdfError,
     stage: pdfStage,
     progress: pdfProgress,
-    result: pdfResult,
     isBusy: pdfBusy,
     processPdf: processPdfAnalysis,
     reset: resetPdf,
@@ -66,173 +66,96 @@ const Screen22IdeaChecker = () => {
 
   return (
     <AuthenticatedLayout title="Research Idea Checker">
-      <div className="mx-auto max-w-3xl space-y-6">
-        <Card className="p-6">
-          <h2 className="text-2xl font-bold text-slate-900">Check research similarity</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Compare your research idea against thesis text in the OAU repository.
-            Only documents you are authorised to read are compared.
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-12">
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-800">
+            <Lightbulb className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-emerald-800">Novelty review</p>
+          <h2 className="mt-2 text-3xl font-semibold text-slate-900">Has your idea been explored?</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+            Compare a proposed study with thesis text in the OAU repository. Only documents you are authorised to read are included; similarity is a review signal, not proof of novelty or plagiarism.
           </p>
+        </div>
 
-          {/* Mode selector */}
-          <div className="mt-6 flex gap-2 border-b border-slate-200 pb-2">
-            <Button
-              variant={mode === 'text' ? 'primary' : 'secondary'}
-              size="sm"
+        <section className="mx-auto mt-8 max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <div className="mb-5 inline-flex rounded-md border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="Idea input type">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'text'}
               onClick={() => {
                 setMode('text');
                 setError('');
                 resetPdf();
               }}
+              className={`rounded px-3 py-1.5 text-sm font-medium ${mode === 'text' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
-              Paste text
-            </Button>
-            <Button
-              variant={mode === 'pdf' ? 'primary' : 'secondary'}
-              size="sm"
+              <FileText className="mr-2 inline h-4 w-4" aria-hidden="true" />Paste text
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'pdf'}
               onClick={() => {
                 setMode('pdf');
                 setError('');
                 resetPdf();
               }}
+              className={`rounded px-3 py-1.5 text-sm font-medium ${mode === 'pdf' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
-              Upload PDF
-            </Button>
+              <Upload className="mr-2 inline h-4 w-4" aria-hidden="true" />Upload PDF
+            </button>
           </div>
 
-          {/* Text input mode */}
           {mode === 'text' && (
-            <div className="mt-6">
-              <label
-                htmlFor="similarity-text"
-                className="text-sm font-medium text-slate-700 mb-2 block"
-              >
-                Research idea text
-              </label>
+            <form onSubmit={(event) => { event.preventDefault(); void handleCheckText(); }}>
+              <label htmlFor="similarity-text" className="mb-2 block text-sm font-medium text-slate-700">Proposed research</label>
               <textarea
                 id="similarity-text"
                 value={ideaText}
                 onChange={(event) => setIdeaText(event.target.value)}
-                rows={6}
-                className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm"
+                rows={8}
+                className="w-full resize-y rounded-md border border-slate-300 p-4 text-sm leading-6 text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
                 placeholder="Describe your proposed research idea…"
               />
-              <p className="mt-1 text-xs text-slate-500">
-                Compared as 200-word passages: exact, near-exact and partial wording overlap,
-                plus semantic similarity where the vector index is available.
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                The checker looks for exact, near-exact, partial wording overlap, and semantic similarity when available.
               </p>
-              <Button
-                className="mt-4"
-                disabled={isTextBusy || !ideaText.trim()}
-                onClick={handleCheckText}
-              >
-                {isTextBusy ? 'Checking similarity…' : 'Check similarity'}
-              </Button>
-              {error && (
-                <p role="alert" className="mt-3 rounded-md bg-red-50 p-4 text-sm text-red-700">
-                  {error}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* PDF upload mode */}
-          {mode === 'pdf' && (
-            <div className="mt-6 space-y-4">
-              <label
-                htmlFor="similarity-pdf"
-                className="text-sm font-medium text-slate-700 mb-2 block"
-              >
-                PDF document
-              </label>
-              <div className="mt-2 w-full rounded-md border border-slate-300 p-3 text-sm flex items-center gap-3">
-                <input
-                  id="similarity-pdf"
-                  type="file"
-                  accept=".pdf"
-                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                  className="w-full text-sm"
-                />
-                {file && (
-                  <div className="flex-1 truncate">
-                    <p className="text-sm text-slate-900">{file.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {file.size} bytes · max 10 MB
-                    </p>
-                  </div>
-                )}
-                {file && (
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      setFile(null);
-                      resetPdf();
-                    }}
-                    disabled={pdfBusy}
-                  >
-                    Remove
-                  </Button>
-                )}
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">Compared with accessible, indexed repository text.</p>
+                <Button type="submit" disabled={isTextBusy || !ideaText.trim()}>
+                  {loading ? 'Checking repository…' : <>Analyze my idea <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" /></>}
+                </Button>
               </div>
-              {pdfError && (
-                <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                  {pdfError}
-                </p>
-              )}
-              {pdfStage !== 'idle' && (
-                <Card className="p-4 bg-slate-50 border border-slate-200">
-                  <p className="text-sm text-slate-600">{pdfProgress}</p>
-                  {pdfStage === 'complete' && (
-                    <>
-                      <p className="mt-2 text-sm text-emerald-700">
-                        PDF processed. Opening similarity results…
-                      </p>
-                      {scanInfo && scanInfo.scannedPages > 0 && (
-                        <p className="mt-1 text-xs text-amber-700 bg-amber-50/50 p-2 rounded">
-                          {scanInfo.scannedPages} of {scanInfo.totalPages} page(s)
-                          could not be extracted (scanned or image-based). Similarity
-                          results cover only the {scanInfo.extractablePages} extractable
-                          page(s).
-                        </p>
-                      )}
-                    </>
-                  )}
-                </Card>
-              )}
-            </div>
+            </form>
           )}
 
           {mode === 'pdf' && (
-            <div className="mt-6 space-y-2">
-              <Button
-                className="mt-4"
-                disabled={isTextBusy || !file}
-                onClick={handlePdfRun}
-              >
-                {pdfStage === 'complete'
-                  ? 'Opening results…'
-                  : pdfStage === 'idle'
-                    ? 'Upload and check PDF'
-                    : `Processing… ${pdfProgress}`}
+            <div className="space-y-4">
+              <label htmlFor="similarity-pdf" className="block text-sm font-medium text-slate-700">Research PDF</label>
+              <input
+                id="similarity-pdf"
+                type="file"
+                accept=".pdf"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                className="block w-full rounded-md border border-slate-300 bg-white p-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-900"
+              />
+              {file && <p className="truncate text-xs text-slate-500">Selected: {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</p>}
+              <Button disabled={isTextBusy || !file} onClick={handlePdfRun}>
+                {pdfBusy ? 'Checking PDF…' : <>Analyze PDF <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" /></>}
               </Button>
-              {error && (
-                <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-                  {error}
-                </p>
-              )}
+              {pdfError && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{pdfError}</p>}
+              {error && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+              {pdfStage !== 'idle' && <p role="status" className="text-sm text-slate-600">{pdfProgress}</p>}
+              {scanInfo && scanInfo.scannedPages > 0 && <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">{scanInfo.scannedPages} of {scanInfo.totalPages} pages had no extractable text; results cover {scanInfo.extractablePages} pages.</p>}
             </div>
           )}
-        </Card>
+        </section>
 
-        <Card className="p-6 bg-slate-50 border border-slate-200">
-          <p className="text-sm text-slate-600">
-            Similarity is an indicator for review, not a plagiarism finding. Use the
-            plagiarism assessment screen for attribution-aware analysis. Temporary
-            PDF uploads are deleted automatically after the check; no permanent
-            repository record is created.
-          </p>
-        </Card>
+        <p className="mx-auto mt-5 max-w-3xl text-center text-xs leading-5 text-slate-500">
+          Similarity is an indicator for review, not a plagiarism finding. Temporary PDF uploads are removed after the check and are not added to the repository.
+        </p>
       </div>
     </AuthenticatedLayout>
   );

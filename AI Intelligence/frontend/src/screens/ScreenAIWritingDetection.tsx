@@ -36,7 +36,6 @@ const ScreenAIWritingDetection = () => {
     pdfError,
     stage: pdfStage,
     progress: pdfProgress,
-    result: pdfResult,
     isBusy: pdfBusy,
     processPdf: processPdfAnalysis,
     reset: resetPdf,
@@ -79,9 +78,9 @@ const ScreenAIWritingDetection = () => {
     setError('');
     setUnavailable('');
     setResult(null);
-    await processPdfAnalysis();
-    if (pdfResult && typeof pdfResult === 'object' && 'status' in pdfResult) {
-      setResult(pdfResult as AIWritingDetectResponse);
+    const nextResult = await processPdfAnalysis();
+    if (nextResult && typeof nextResult === 'object' && 'status' in nextResult) {
+      setResult(nextResult as AIWritingDetectResponse);
     }
   };
 
@@ -205,6 +204,12 @@ const ScreenAIWritingDetection = () => {
                   </Button>
                 )}
               </div>
+              <Button
+                disabled={isTextBusy || !file}
+                onClick={handlePdfRun}
+              >
+                {pdfBusy ? 'Analyzing PDF…' : 'Run detection'}
+              </Button>
               {pdfError && (
                 <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
                   {pdfError}

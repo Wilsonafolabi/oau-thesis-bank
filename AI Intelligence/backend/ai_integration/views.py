@@ -12,6 +12,7 @@ Django is the identity/permission authority. All endpoints:
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -28,6 +29,7 @@ from .services import (
     derive_access_level,
     forward_to_v2,
     get_internal_service_token,
+    resolve_document_to_thesis,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,17 @@ logger = logging.getLogger(__name__)
 # The AI service stores the successful terminal state as "success". The public
 # API (and the frontend polling contract) uses "completed".
 _JOB_STATUS_ALIASES = {"success": "completed"}
+_TEMPORARY_PDF_PREFIX = "tmp-pdf-"
+
+
+def _is_temporary_pdf_id(value):
+    if not isinstance(value, str) or not value.startswith(_TEMPORARY_PDF_PREFIX):
+        return False
+    try:
+        UUID(value[len(_TEMPORARY_PDF_PREFIX):])
+        return True
+    except ValueError:
+        return False
 
 
 def _map_v2_error(exc: Exception):
@@ -121,18 +134,21 @@ class AIDocumentUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Write authorization and the AI access scope are both derived from the
-        # thesis record. The client never chooses either: a draft thesis that
-        # asked for "public" must not become globally retrievable.
-        access_level = derive_access_level(thesis_id, request.user)
-        if access_level is None:
-            return Response(
-                {
-                    "error": "Access Denied",
-                    "detail": "You do not have permission to upload for this thesis.",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        # Temporary analysis uploads have no Django thesis record. Keep them
+        # private and let V2 enforce ownership from the authenticated actor.
+        # Permanent thesis uploads still derive scope from the thesis record.
+        if _is_temporary_pdf_id(thesis_id):
+            access_level = "private"
+        else:
+            access_level = derive_access_level(thesis_id, request.user)
+            if access_level is None:
+                return Response(
+                    {
+                        "error": "Access Denied",
+                        "detail": "You do not have permission to upload for this thesis.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         actor_context = build_actor_context(request.user)
 
@@ -141,6 +157,7 @@ class AIDocumentUploadView(APIView):
         data = {
             "backend_user_id": str(request.user.id),
             "access_level": access_level,
+            "backend_thesis_id": thesis_id,
         }
         if "thesis_metadata" in request.data:
             data["thesis_metadata"] = request.data["thesis_metadata"]
@@ -219,8 +236,16 @@ class AIDocumentDeleteView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Write authorization: only the owner or an admin may delete AI data.
-        if not check_thesis_write_access(backend_thesis_id, request.user):
+        # backend_thesis_id from the URL is actually a V2 document UUID
+        # (AIDocument.id), not a Django Thesis PK. Resolve it to the Django
+        # Thesis PK for the access check. If it doesn't resolve as a V2 UUID,
+        # treat it as a Django Thesis PK directly (backward compat).
+        thesis_id = resolve_document_to_thesis(backend_thesis_id)
+        if thesis_id is None:
+            thesis_id = backend_thesis_id
+        # Temporary documents have no Django Thesis row. V2 checks their
+        # backend_user_id against this authenticated actor before deletion.
+        if not _is_temporary_pdf_id(thesis_id) and not check_thesis_write_access(thesis_id, request.user):
             return Response(
                 {
                     "error": "Access Denied",
@@ -337,7 +362,19 @@ class AIRAGAskView(APIView):
         if document_ids:
             # Enforce access to each requested document.
             for doc_id in document_ids:
-                if not check_thesis_access(doc_id, request.user):
+                # Resolve V2 document UUID to Django Thesis PK before
+                # checking access. V2 document IDs are UUIDs; Thesis PKs
+                # are integers. The mapping lives in ai_documents.
+                thesis_id = resolve_document_to_thesis(doc_id)
+                if thesis_id is None:
+                    return Response(
+                        {
+                            "error": "Access Denied",
+                            "detail": f"Unknown document {doc_id}.",
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                if not check_thesis_access(thesis_id, request.user):
                     return Response(
                         {
                             "error": "Access Denied",
@@ -405,7 +442,19 @@ class AIResearchGapView(APIView):
         if document_ids:
             # Enforce access to each requested document.
             for doc_id in document_ids:
-                if not check_thesis_access(doc_id, request.user):
+                # Resolve V2 document UUID to Django Thesis PK before
+                # checking access. V2 document IDs are UUIDs; Thesis PKs
+                # are integers. The mapping lives in ai_documents.
+                thesis_id = resolve_document_to_thesis(doc_id)
+                if thesis_id is None:
+                    return Response(
+                        {
+                            "error": "Access Denied",
+                            "detail": f"Unknown document {doc_id}.",
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                if not check_thesis_access(thesis_id, request.user):
                     return Response(
                         {
                             "error": "Access Denied",
@@ -1115,6 +1164,20 @@ class AIThesisQAView(APIView):
             )
 
         actor_context = build_actor_context(request.user)
+
+        # Enforce thesis access before forwarding to V2.
+        # backend_thesis_id is the Django Thesis primary key (integer), not a
+        # V2 document UUID. Authorize it directly against the Django thesis
+        # record; do not run it through the document-UUID resolver.
+        if not check_thesis_access(backend_thesis_id, request.user):
+            return Response(
+                {
+                    "error": "Access Denied",
+                    "detail": f"You do not have access to thesis {backend_thesis_id}.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         try:
             result = forward_to_v2(
                 method="POST",

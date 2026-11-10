@@ -44,6 +44,10 @@ class TypedDecisionRouter:
         self.jev = jev_client or JEVClient()
         self.settings = settings or get_settings()
         self.telemetry: list = []
+        # Local decision model (Laya-style) state — observable so callers
+        # can determine whether local inference is available.
+        self.local_model_available: bool = False
+        self.local_model_error: Optional[str] = None
 
     def _record(self, result: DecisionResult) -> DecisionResult:
         self.telemetry.append(result.model_dump(mode="json"))
@@ -402,28 +406,36 @@ class TypedDecisionRouter:
             fallback_reason = FallbackReason.ERROR
 
         # Local decision model (Laya-style) secondary check.
-        try:
-            local_result = self._local_predict(state, questions)
-            answers = local_result.get("answers", {})
-
-            decision = self._process_answers(
-                task,
-                answers,
-                "local",
-                fallback_reason,
+        local_result = self._local_predict(state, questions)
+        if local_result.get("status") == "unavailable":
+            # Local model not configured — record the state and fall through
+            # to the LLM fallback without logging a noisy exception.
+            logger.debug(
+                "Local decision model unavailable: %s",
+                local_result.get("reason", "unknown"),
             )
-
-            if decision.confidence >= self.policy.confidence_threshold:
-                decision.provenance["elapsed_ms"] = round(
-                    (time.monotonic() - started) * 1000, 2
-                )
-                return self._record(decision)
-
-            fallback_reason = FallbackReason.LOW_CONFIDENCE
-
-        except Exception:
-            logger.exception("Local decision model failed")
             fallback_reason = FallbackReason.ERROR
+        else:
+            try:
+                answers = local_result.get("answers", {})
+                decision = self._process_answers(
+                    task,
+                    answers,
+                    "local",
+                    fallback_reason,
+                )
+
+                if decision.confidence >= self.policy.confidence_threshold:
+                    decision.provenance["elapsed_ms"] = round(
+                        (time.monotonic() - started) * 1000, 2
+                    )
+                    return self._record(decision)
+
+                fallback_reason = FallbackReason.LOW_CONFIDENCE
+
+            except Exception:
+                logger.exception("Local decision model failed")
+                fallback_reason = FallbackReason.ERROR
 
         decision = await self._fallback_to_llm(
             task,
@@ -493,12 +505,21 @@ class TypedDecisionRouter:
     def _local_predict(
         self, state: Dict[str, Any], questions: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Local decision model prediction (Laya-style reference).
+        """Local decision model prediction (Laya-style).
 
-        Returns a structured dict with answers. In the V2 reference this
-        delegates to a local model; here it is a bounded deterministic
-        placeholder that raises if no local model is configured — it does
-        not silently fabricate answers.
+        Returns a structured dict with answers. In the V2 foundation stage no
+        trained local model artifact is available, so this returns an
+        "unavailable" status rather than raising — the router treats an
+        unavailable local model as a graceful degradation, falling through to
+        the LLM fallback.
         """
-        # Local model not configured in V2 foundation stage. Fail closed.
-        raise RuntimeError("local_decision_model_not_configured")
+        # Local model not configured in V2 foundation stage. Report as
+        # unavailable rather than raising; the router falls through to the
+        # LLM fallback.
+        self.local_model_available = False
+        self.local_model_error = "local_decision_model_not_configured"
+        return {
+            "status": "unavailable",
+            "reason": "local_decision_model_not_configured",
+            "answers": {},
+        }
