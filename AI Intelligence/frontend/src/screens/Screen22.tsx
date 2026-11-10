@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, useAppRouter } from '../components/shared';
 import { ArrowRight, FileText, Lightbulb, Upload } from 'lucide-react';
-import { ApiError } from '../lib/api';
+import { ApiError, apiErrorMessage } from '../lib/api';
 import { checkSimilarityText } from '../services/aiService';
 import { usePdfDocumentProcessing } from '../hooks/usePdfDocumentProcessing';
 import { SIMILARITY_REPORT_KEY } from './Screen23';
@@ -44,12 +44,8 @@ const Screen22IdeaChecker = () => {
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setError('You do not have access to one or more compared documents.');
-      } else if (err instanceof ApiError && err.status === 503) {
-        setError(err.detail || 'Semantic comparison is unavailable right now.');
-      } else if (err instanceof ApiError) {
-        setError(err.detail);
       } else {
-        setError('Similarity check failed.');
+        setError(apiErrorMessage(err, 'Similarity comparison is unavailable right now. Please try again.'));
       }
     } finally {
       setLoading(false);

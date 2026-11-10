@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout, Card } from '../components/shared';
+import { apiErrorMessage, userFacingMessage } from '../lib/api';
 import { askResearchQuestion } from '../services/aiService';
 import type { RagCitation } from '../services/aiService';
 
@@ -20,11 +21,11 @@ const Screen28AIAnswer = () => {
       const data = await askResearchQuestion(question);
       setMessages((prev) => [...prev, {
         role: 'ai',
-        content: data.answer || data.message || 'No answer returned.',
+        content: data.answer || userFacingMessage(data.message, 'The assistant could not complete that request. Please try again.'),
         citations: data.citations || [],
       }]);
     } catch (error) {
-      setMessages((prev) => [...prev, { role: 'ai', content: error instanceof Error ? error.message : 'AI request failed.' }]);
+      setMessages((prev) => [...prev, { role: 'ai', content: apiErrorMessage(error, 'The assistant is unavailable right now. Please try again.') }]);
     } finally {
       setLoading(false);
     }

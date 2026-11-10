@@ -35,9 +35,20 @@ const detailFromPayload = (payload: unknown) => {
   return 'The request could not be completed.';
 };
 
-export const apiErrorMessage = (error: unknown, fallback: string) => (
-  error instanceof ApiError && error.detail ? error.detail : fallback
-);
+const INTERNAL_FAILURE_DETAILS = /\b(deepseek|groq|jev|vectorize|cloudflare|cuda|nvidia|triton|pytorch|torch|sentence[- ]transformers|cross[- ]encoder|provider|tools?|traceback|stack trace|api[_ -]?key)\b/i;
+
+export const userFacingMessage = (message: unknown, fallback: string) => {
+  if (typeof message !== 'string' || !message.trim()) return fallback;
+  const cleanMessage = message.trim();
+  return INTERNAL_FAILURE_DETAILS.test(cleanMessage) ? fallback : cleanMessage;
+};
+
+export const apiErrorMessage = (error: unknown, fallback: string) => {
+  if (!(error instanceof ApiError) || !error.detail || error.status >= 500) {
+    return fallback;
+  }
+  return userFacingMessage(error.detail, fallback);
+};
 
 const parseResponse = async (response: Response) => {
   if (response.status === 204) return undefined;

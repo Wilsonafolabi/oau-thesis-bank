@@ -443,6 +443,8 @@ class IngestionService:
                 exc,
             )
             raise
+        finally:
+            self.embedding_service.release_device_memory()
 
     async def _extract_pages(
         self, document: AIDocument

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, Card, Badge, useAppRouter } from '../components/shared';
-import { ApiError } from '../lib/api';
+import { ApiError, apiErrorMessage, userFacingMessage } from '../lib/api';
 import {
   detectAIWriting,
   type AIWritingBand,
@@ -62,11 +62,9 @@ const ScreenAIWritingDetection = () => {
     } catch (err) {
       // 503 means the detector itself could not run. No score is shown.
       if (err instanceof ApiError && err.status === 503) {
-        setUnavailable(err.detail || 'The AI-writing detector is not available.');
-      } else if (err instanceof ApiError) {
-        setError(err.detail);
+        setUnavailable(apiErrorMessage(err, 'AI-writing detection is temporarily unavailable. Please try again later.'));
       } else {
-        setError('AI writing detection failed.');
+        setError(apiErrorMessage(err, 'AI-writing detection could not be completed. Please try again.'));
       }
     } finally {
       setLoading(false);
@@ -266,7 +264,9 @@ const ScreenAIWritingDetection = () => {
               ))}
             </ul>
             {result.blocker && (
-              <p className="mt-2 text-xs text-slate-500">{result.blocker}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {userFacingMessage(result.blocker, 'The detector is temporarily unavailable. Please try again later.')}
+              </p>
             )}
             <p className="mt-2 text-xs text-slate-500">
               No probability is shown because no detection was performed.

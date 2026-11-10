@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from ..local_model_runtime import MODEL_RUNTIME_LOCK, clear_cuda_cache
+
 logger = logging.getLogger("oau_ai.ai_writing")
 
 MODEL_ID = "rasbt/ai-text-detector-modernbert"
@@ -217,16 +219,6 @@ class AITextDetectionService:
                 ],
             )
 
-        available, blocker = self.availability()
-        if not available:
-            return AITextDetectionResult(
-                status=STATUS_UNAVAILABLE,
-                model_id=MODEL_ID,
-                model_version=MODEL_REVISION,
-                blocker=blocker,
-                limitations=["No detection was performed, so no score is reported."],
-            )
-
         segments = self._segment(text)
         if not segments:
             return AITextDetectionResult(
@@ -237,7 +229,21 @@ class AITextDetectionService:
             )
 
         try:
-            probabilities = self._score([segment[0] for segment in segments])
+            with MODEL_RUNTIME_LOCK:
+                available, blocker = self.availability()
+                if not available:
+                    return AITextDetectionResult(
+                        status=STATUS_UNAVAILABLE,
+                        model_id=MODEL_ID,
+                        model_version=MODEL_REVISION,
+                        blocker=blocker,
+                        limitations=["No detection was performed, so no score is reported."],
+                    )
+                used_real_model = self._backend is not None
+                try:
+                    probabilities = self._score([segment[0] for segment in segments])
+                finally:
+                    self.release_device_memory()
         except Exception as exc:  # noqa: BLE001
             logger.warning("ai_writing.inference_failed: %s", exc)
             return AITextDetectionResult(
@@ -269,7 +275,7 @@ class AITextDetectionService:
             model_id=MODEL_ID,
             model_version=MODEL_REVISION,
             # Only a real backend applies the model's published temperature.
-            calibration="temperature_scaled" if self._backend is not None else None,
+            calibration="temperature_scaled" if used_real_model else None,
             limitations=[
                 "Trained on English human-vs-AI text from `rasbt/human-vs-ai-50k`; "
                 "performance on OAU theses is not established.",
@@ -281,6 +287,17 @@ class AITextDetectionService:
                 "The score is a property of the text, not of its author.",
             ],
         )
+
+    def release_device_memory(self) -> None:
+        with MODEL_RUNTIME_LOCK:
+            backend = self._backend
+            if backend is not None:
+                try:
+                    backend["model"].to("cpu")
+                except Exception:
+                    pass
+                self._backend = None
+            clear_cuda_cache()
 
     def _score(self, texts: List[str]) -> List[float]:
         """Return the AI-class probability for each text."""

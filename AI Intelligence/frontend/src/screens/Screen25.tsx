@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, useAppRouter } from '../components/shared';
+import { userFacingMessage } from '../lib/api';
 import { detectGaps } from '../services/aiService';
 import { usePdfDocumentProcessing } from '../hooks/usePdfDocumentProcessing';
 
@@ -41,9 +42,7 @@ const Screen25GapExplorer = () => {
       setGaps(await detectGaps(input.trim()));
       setHasAnalyzed(true);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Gap detection failed.'
-      );
+      setError(userFacingMessage(nextError instanceof Error ? nextError.message : '', 'Gap analysis is unavailable right now. Please try again.'));
     } finally {
       setLoading(false);
     }

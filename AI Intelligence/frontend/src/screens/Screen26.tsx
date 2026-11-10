@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
 import { detectGaps } from '../services/aiService';
+import { userFacingMessage } from '../lib/api';
 
 const formatGapType = (value?: string) =>
   value ? value.replace(/_/g, ' ') : 'candidate gap';
@@ -17,7 +18,7 @@ const Screen26GapAnalysis = () => {
     setLoading(true);
     detectGaps(topic)
       .then((gaps) => setGap(gaps.find((item) => item.gap_type === topic) || gaps[0] || null))
-      .catch((nextError) => setError(nextError instanceof Error ? nextError.message : 'Unable to load gap analysis.'))
+      .catch((nextError) => setError(userFacingMessage(nextError instanceof Error ? nextError.message : '', 'Unable to load gap analysis right now. Please try again.')))
       .finally(() => setLoading(false));
   }, [topic]);
 

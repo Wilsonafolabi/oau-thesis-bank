@@ -40,6 +40,7 @@ from ..llm.router import (
     complete_with_deepseek,
     get_router,
 )
+from ..local_model_runtime import MODEL_RUNTIME_LOCK, clear_cuda_cache
 from ..memory.service import MemoryService
 from ..retrieval.service import (
     AuthorizedChunk,
@@ -171,35 +172,49 @@ class Reranker:
         if not chunks:
             return []
 
-        if not self.available:
-            logger.warning(
-                "reranker.skip reason=%s chunk_count=%d",
-                self._load_error or "reranker unavailable",
-                len(chunks),
-            )
-            return chunks[:top_k] if top_k else chunks
+        with MODEL_RUNTIME_LOCK:
+            if not self.available:
+                logger.warning(
+                    "reranker.skip reason=%s chunk_count=%d",
+                    self._load_error or "reranker unavailable",
+                    len(chunks),
+                )
+                return chunks[:top_k] if top_k else chunks
 
-        try:
-            pairs = [(query, chunk.text) for chunk in chunks]
-            scores = self._model.predict(pairs)  # type: ignore[union-attr]
+            try:
+                pairs = [(query, chunk.text) for chunk in chunks]
+                scores = self._model.predict(pairs)  # type: ignore[union-attr]
 
-            scored = list(zip(chunks, scores))
-            scored.sort(key=lambda x: float(x[1]), reverse=True)
+                scored = list(zip(chunks, scores))
+                scored.sort(key=lambda x: float(x[1]), reverse=True)
 
-            reranked = [chunk for chunk, _ in scored]
-            result = reranked[:top_k] if top_k else reranked
+                reranked = [chunk for chunk, _ in scored]
+                result = reranked[:top_k] if top_k else reranked
 
-            logger.info(
-                "reranker.completed chunk_count=%d returned=%d",
-                len(chunks),
-                len(result),
-            )
-            return result
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "reranker.failed error=%s chunk_count=%d", exc, len(chunks)
-            )
-            return chunks[:top_k] if top_k else chunks
+                logger.info(
+                    "reranker.completed chunk_count=%d returned=%d",
+                    len(chunks),
+                    len(result),
+                )
+                return result
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "reranker.failed error=%s chunk_count=%d", exc, len(chunks)
+                )
+                return chunks[:top_k] if top_k else chunks
+            finally:
+                self.release_device_memory()
+
+    def release_device_memory(self) -> None:
+        with MODEL_RUNTIME_LOCK:
+            if self._model is not None:
+                try:
+                    self._model.to("cpu")
+                except Exception:
+                    pass
+            self._model = None
+            self._available = None
+            clear_cuda_cache()
 
 
 class RAGService:
@@ -472,6 +487,29 @@ class RAGService:
             )
 
             matches = result.get("result", {}).get("matches", [])
+            if accessible_ids:
+                allowed_ids = set(accessible_ids)
+                matches = [
+                    match
+                    for match in matches
+                    if (match.get("metadata") or {}).get("document_id")
+                    in allowed_ids
+                ]
+                if not matches:
+                    # Vectorize can return no filtered matches when the index
+                    # lacks a metadata index for document_id. Over-fetch and
+                    # scope candidates locally; PostgreSQL rechecks access and
+                    # thesis scope before any chunk text reaches the LLM.
+                    result = self.vectorize_service.query(
+                        vector=query_vector,
+                        top_k=50,
+                    )
+                    matches = [
+                        match
+                        for match in result.get("result", {}).get("matches", [])
+                        if (match.get("metadata") or {}).get("document_id")
+                        in allowed_ids
+                    ]
             return matches, False
         except ProviderUnavailableError as exc:
             logger.warning("Vectorize query failed: %s", exc.message)

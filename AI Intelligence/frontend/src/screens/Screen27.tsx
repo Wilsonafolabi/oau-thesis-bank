@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bot, Send, Trash2 } from 'lucide-react';
 import { AuthenticatedLayout, Button, useAppRouter } from '../components/shared';
+import { apiErrorMessage, userFacingMessage } from '../lib/api';
 import { askGeneralAssistant } from '../services/aiService';
 import type { AssistantMessage, AssistantModelTier } from '../services/aiService';
 
@@ -42,9 +43,9 @@ const Screen27AIAssistant = () => {
     try {
       const history: AssistantMessage[] = next.map((m) => ({ role: m.role, content: m.content }));
       const data = await askGeneralAssistant(history, provider);
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.answer || data.message || 'No answer returned.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.answer || userFacingMessage(data.message, 'The assistant could not complete that request. Please try again.') }]);
     } catch (error) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: error instanceof Error ? error.message : 'AI request failed.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: apiErrorMessage(error, 'The assistant is unavailable right now. Please try again.') }]);
     } finally {
       setLoading(false);
     }

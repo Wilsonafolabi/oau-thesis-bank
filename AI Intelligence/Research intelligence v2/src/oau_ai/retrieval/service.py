@@ -579,15 +579,19 @@ class RetrievalService:
         # later when chunks are fetched via get_authorized_chunks / get_chunk_by_id,
         # which re-verify document-level access before returning any text.
         dense_items: List[dict] = []
+        scoped_document_ids = set(document_ids or [])
         for match in vectorize_results:
             metadata = match.get("metadata", {})
+            document_id = metadata.get("document_id", "")
+            if scoped_document_ids and document_id not in scoped_document_ids:
+                continue
             chunk_id = metadata.get("chunk_id")
             score = match.get("score", 0.0)
             if chunk_id:
                 dense_items.append(
                     {
                         "chunk_id": chunk_id,
-                        "document_id": metadata.get("document_id", ""),
+                        "document_id": document_id,
                         "score": score,
                         "retrieval_source": "dense",
                     }
@@ -643,6 +647,11 @@ class RetrievalService:
 
             authorized = resolved.get(chunk_id)
             if authorized is None:
+                continue
+            if (
+                scoped_document_ids
+                and authorized.document_id not in scoped_document_ids
+            ):
                 continue
 
             in_dense = chunk_id in dense_scores

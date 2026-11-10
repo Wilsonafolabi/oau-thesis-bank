@@ -415,6 +415,24 @@ def test_injected_predictor_scores_segments(tmp_path):
     assert result.calibration is None
 
 
+def test_local_detector_model_is_released_after_scoring(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    import oau_ai.ai_writing.service as detector_module
+
+    model = Mock()
+    service = AITextDetectionService(model_root=str(tmp_path))
+    service._backend = {"model": model}
+    monkeypatch.setattr(service, "_score", lambda texts: [0.8])
+    monkeypatch.setattr(detector_module, "clear_cuda_cache", lambda: None)
+
+    result = service.detect(" ".join(["research"] * 80))
+
+    assert result.status == "ok"
+    model.to.assert_called_once_with("cpu")
+    assert service._backend is None
+
+
 def test_injected_predictor_reports_low_scores(tmp_path):
     service = AITextDetectionService(
         model_root=str(tmp_path), predictor=lambda text: 0.05

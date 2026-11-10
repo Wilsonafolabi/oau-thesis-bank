@@ -1,12 +1,33 @@
 ﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as aiService from '../aiService';
-import { ApiError } from '../../lib/api';
+import { ApiError, apiErrorMessage, userFacingMessage } from '../../lib/api';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
   });
+
+describe('user-facing API errors', () => {
+  it('keeps actionable validation details', () => {
+    expect(apiErrorMessage(new ApiError(400, 'A question is required.'), 'Try again.'))
+      .toBe('A question is required.');
+  });
+
+  it('hides provider and tool implementation details', () => {
+    expect(apiErrorMessage(new ApiError(502, 'DeepSeek tool call failed: timeout.'), 'Please try again shortly.'))
+      .toBe('Please try again shortly.');
+    expect(apiErrorMessage(new ApiError(502, 'SearchDocs tool returned an exception.'), 'Please try again shortly.'))
+      .toBe('Please try again shortly.');
+    expect(userFacingMessage('JEV rejected the request: invalid_output.', 'The answer is unavailable.'))
+      .toBe('The answer is unavailable.');
+  });
+
+  it('uses a neutral fallback for server errors', () => {
+    expect(apiErrorMessage(new ApiError(503, 'Internal server error.'), 'AI is temporarily unavailable.'))
+      .toBe('AI is temporarily unavailable.');
+  });
+});
 
 describe('AI service — Django contracts', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;

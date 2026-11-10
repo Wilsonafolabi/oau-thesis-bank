@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, Card, Badge, useAppRouter } from '../components/shared';
-import { ApiError } from '../lib/api';
+import { apiErrorMessage } from '../lib/api';
 import {
   assessPlagiarism,
   type PlagiarismResponse,
@@ -52,11 +52,7 @@ const ScreenPlagiarismAssess = () => {
     try {
       setResult(await assessPlagiarism({ text: text.trim() }));
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.detail);
-      } else {
-        setError('The assessment could not be completed.');
-      }
+      setError(apiErrorMessage(err, 'The assessment could not be completed. Please try again.'));
     } finally {
       setLoading(false);
     }

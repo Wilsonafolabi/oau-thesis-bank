@@ -87,6 +87,11 @@ class DocumentAuthorizationTests(APITestCase):
         self.assertEqual(response.status_code, 202)
         _, kwargs = forward.call_args
         self.assertEqual(kwargs["data"]["backend_user_id"], str(self.owner.id))
+        self.thesis.refresh_from_db()
+        self.assertEqual(self.thesis.ai_job_id, "j1")
+        self.assertEqual(
+            self.thesis.processing_status, Thesis.ProcessingStatus.QUEUED
+        )
 
     def test_owner_can_upload_temporary_pdf_without_thesis_access(self):
         _login(self.client, self.owner.email)

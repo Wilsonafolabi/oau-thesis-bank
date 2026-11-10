@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { userFacingMessage } from '../lib/api';
 import {
   ingestThesisPdf,
   getAIDocumentJob,
@@ -106,7 +107,10 @@ export const usePdfDocumentProcessing = (
       ]);
       setCleanupError(null);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Cleanup failed.';
+      const errorMessage = userFacingMessage(
+        err instanceof Error ? err.message : '',
+        'Temporary document cleanup could not be completed.'
+      );
       // Log with document ID for observability; do not overwrite a successful
       // analysis result, and do not silently swallow the failure.
       setCleanupLog((prev) => [
@@ -250,11 +254,12 @@ export const usePdfDocumentProcessing = (
       setProgress('Analysis complete.');
       return analysisResult;
     } catch (err) {
-      if (err instanceof Error) {
-        setPdfError(err.message);
-      } else {
-        setPdfError('PDF processing failed.');
-      }
+      setPdfError(
+        userFacingMessage(
+          err instanceof Error ? err.message : '',
+          'PDF processing could not be completed. Please try again.'
+        )
+      );
       setStage('idle');
       return null;
     } finally {

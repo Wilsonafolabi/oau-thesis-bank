@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { AuthenticatedLayout, Badge, Button, Card, useAppRouter } from '../components/shared';
-import { apiErrorMessage } from '../lib/api';
+import { apiErrorMessage, userFacingMessage } from '../lib/api';
 import { summarizeThesis, askThesisQuestion, type ThesisQAResponse } from '../services/aiService';
 
 const Screen10ThesisAISummary = () => {
@@ -11,17 +11,19 @@ const Screen10ThesisAISummary = () => {
   const [answer, setAnswer] = useState('');
   const [citations, setCitations] = useState<ThesisQAResponse['citations']>([]);
   const [insufficientEvidence, setInsufficientEvidence] = useState(false);
-  const [error, setError] = useState('');
+  const [summaryError, setSummaryError] = useState('');
+  const [qaError, setQaError] = useState('');
+  const [qaNotice, setQaNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const generateSummary = async () => {
     if (!thesisId) {
-      setError('No thesis was selected.');
+      setSummaryError('No thesis was selected.');
       return;
     }
     setLoading(true);
-    setError('');
+    setSummaryError('');
     setAnswer('');
     setCitations([]);
     setInsufficientEvidence(false);
@@ -29,7 +31,7 @@ const Screen10ThesisAISummary = () => {
       const data = await summarizeThesis(thesisId);
       setSummary(data.summary || '');
     } catch (nextError) {
-      setError(apiErrorMessage(nextError, 'Unable to generate the summary.'));
+      setSummaryError(apiErrorMessage(nextError, 'Unable to generate the summary.'));
     } finally {
       setLoading(false);
     }
@@ -37,15 +39,16 @@ const Screen10ThesisAISummary = () => {
 
   const askQuestion = useCallback(async () => {
     if (!thesisId) {
-      setError('No thesis was selected.');
+      setQaError('No thesis was selected.');
       return;
     }
     if (!question.trim()) {
-      setError('Please enter a question.');
+      setQaError('Please enter a question.');
       return;
     }
     setSubmitting(true);
-    setError('');
+    setQaError('');
+    setQaNotice('');
     setAnswer('');
     setCitations([]);
     setInsufficientEvidence(false);
@@ -59,11 +62,15 @@ const Screen10ThesisAISummary = () => {
       setAnswer(data.answer || '');
       setCitations(data.citations || []);
       setInsufficientEvidence(!!data.insufficient_evidence);
-      if (data.message) {
-        setError(data.message);
+      if (data.insufficient_evidence) {
+        setQaNotice(
+          'I could not find thesis passages relevant to that question. Try asking about a specific method, dataset, finding, or conclusion.'
+        );
+      } else if (data.message) {
+        setQaNotice(userFacingMessage(data.message, 'The answer could not be completed. Please try again.'));
       }
     } catch (nextError) {
-      setError(apiErrorMessage(nextError, 'Unable to answer the question.'));
+      setQaError(apiErrorMessage(nextError, 'Unable to answer the question.'));
     } finally {
       setSubmitting(false);
     }
@@ -90,7 +97,7 @@ const Screen10ThesisAISummary = () => {
                 Clear Summary
               </Button>
             </div>
-            {error && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
+            {summaryError && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700" role="alert">{summaryError}</p>}
             {summary && (
               <Card className="p-6 mt-4">
                 <h3 className="mb-3 text-lg font-bold text-slate-900">Summary</h3>
@@ -129,15 +136,16 @@ const Screen10ThesisAISummary = () => {
                   setAnswer('');
                   setCitations([]);
                   setInsufficientEvidence(false);
-                  setError('');
+                  setQaError('');
+                  setQaNotice('');
                 }}>
                   Clear
                 </Button>
               </div>
-              {error && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-              {insufficientEvidence && !error && (
+              {qaError && <p className="rounded-md bg-red-50 p-4 text-sm text-red-700" role="alert">{qaError}</p>}
+              {qaNotice && (
                 <p className="rounded-md bg-amber-50 p-4 text-sm text-amber-700" role="alert">
-                  Insufficient evidence to answer this question from the thesis content.
+                  {qaNotice}
                 </p>
               )}
               {answer && (

@@ -11,7 +11,9 @@ Verifies that:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import sys
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -86,6 +88,81 @@ class TestEmbeddingServiceRaisesCanonicalConfigurationError:
         assert exc.component == "embedding_service"
         assert "sentence-transformers is not installed" in exc.message
         assert isinstance(exc, ConfigurationError)
+
+
+class TestEmbeddingServiceMemoryHandling:
+    def test_uses_configured_batch_size(self, monkeypatch):
+        import oau_ai.embeddings.service as embedding_module
+
+        class Vector:
+            def tolist(self):
+                return [0.1, 0.2]
+
+        model = Mock()
+        model.encode.return_value = [Vector()]
+        monkeypatch.setattr(embedding_module, "_MODEL_CACHE", {})
+        monkeypatch.setitem(
+            sys.modules,
+            "sentence_transformers",
+            SimpleNamespace(SentenceTransformer=Mock(return_value=model)),
+        )
+
+        result = EmbeddingService(model_name="test-model").embed_texts(["text"])
+
+        assert result[0].vector == [0.1, 0.2]
+        model.encode.assert_called_once_with(
+            ["text"], normalize_embeddings=True, batch_size=8
+        )
+
+    def test_retries_cuda_oom_on_cpu(self, monkeypatch):
+        import oau_ai.embeddings.service as embedding_module
+
+        class Vector:
+            def tolist(self):
+                return [0.3, 0.4]
+
+        model = Mock()
+        model.encode.side_effect = [RuntimeError("CUDA error: out of memory"), [Vector()]]
+        monkeypatch.setattr(embedding_module, "_MODEL_CACHE", {})
+        monkeypatch.setitem(
+            sys.modules,
+            "sentence_transformers",
+            SimpleNamespace(SentenceTransformer=Mock(return_value=model)),
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "torch",
+            SimpleNamespace(cuda=SimpleNamespace(empty_cache=Mock())),
+        )
+
+        result = EmbeddingService(model_name="test-model").embed_texts(["text"])
+
+        assert result[0].vector == [0.3, 0.4]
+        model.to.assert_called_once_with("cpu")
+        assert model.encode.call_count == 2
+
+    def test_release_device_memory_evicts_model_and_clears_cuda_cache(self, monkeypatch):
+        import oau_ai.embeddings.service as embedding_module
+
+        model = Mock()
+        monkeypatch.setattr(embedding_module, "_MODEL_CACHE", {"test-model": model})
+        service = EmbeddingService(model_name="test-model")
+        service._model = model
+        service._model_loaded = True
+        empty_cache = Mock()
+        monkeypatch.setitem(
+            sys.modules,
+            "torch",
+            SimpleNamespace(cuda=SimpleNamespace(empty_cache=empty_cache)),
+        )
+
+        service.release_device_memory()
+
+        model.to.assert_called_once_with("cpu")
+        empty_cache.assert_called_once_with()
+        assert "test-model" not in embedding_module._MODEL_CACHE
+        assert service._model is None
+        assert service._model_loaded is False
 
 
 class TestRAGCatchesEmbeddingConfigurationError:

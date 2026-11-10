@@ -80,6 +80,8 @@ def test_reranker_reranks_by_score():
     assert result[0].chunk_id == "c-2"  # highest score (0.9)
     assert result[1].chunk_id == "c-3"  # second (0.5)
     assert result[2].chunk_id == "c-1"  # lowest (0.1)
+    mock_model.to.assert_called_once_with("cpu")
+    assert reranker._model is None
 
 
 def test_reranker_top_k_limits_results():

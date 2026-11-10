@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthenticatedLayout, Button, Card, useAppRouter } from '../components/shared';
+import { userFacingMessage } from '../lib/api';
 import {
   extendIdea,
   type IdeaExtensionCitation,
@@ -40,9 +41,7 @@ const Screen24IdeaExtension = () => {
     try {
       setResult(await extendIdea(idea.trim()));
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Unable to extend the idea.'
-      );
+      setError(userFacingMessage(nextError instanceof Error ? nextError.message : '', 'Unable to extend the idea right now. Please try again.'));
     } finally {
       setLoading(false);
     }

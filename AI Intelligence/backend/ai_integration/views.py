@@ -179,6 +179,14 @@ class AIDocumentUploadView(APIView):
                 files={"file": (uploaded_file.name, uploaded_file.read(), uploaded_file.content_type)},
                 timeout=120,
             )
+            job_id = result.get("job_id")
+            if job_id and not _is_temporary_pdf_id(thesis_id):
+                thesis = Thesis.objects.get(pk=thesis_id)
+                thesis.ai_job_id = str(job_id)
+                thesis.processing_status = Thesis.ProcessingStatus.QUEUED
+                thesis.save(
+                    update_fields=["ai_job_id", "processing_status", "updated_at"]
+                )
             return Response(result, status=status.HTTP_202_ACCEPTED)
         except ValueError as exc:
             return _map_v2_error(exc)

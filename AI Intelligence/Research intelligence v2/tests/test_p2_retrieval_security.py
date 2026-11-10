@@ -384,6 +384,35 @@ async def test_vectorize_failure_is_reported_as_degraded():
 
 
 @pytest.mark.asyncio
+async def test_scoped_vectorize_retries_without_unindexed_metadata_filter():
+    requested = {
+        "score": 0.8,
+        "metadata": {"document_id": "doc-requested", "chunk_id": "chunk-1"},
+    }
+    other = {
+        "score": 0.9,
+        "metadata": {"document_id": "doc-other", "chunk_id": "chunk-2"},
+    }
+    vectorize = MagicMock()
+    vectorize.is_configured.return_value = True
+    vectorize.query.side_effect = [
+        {"result": {"matches": []}},
+        {"result": {"matches": [other, requested]}},
+    ]
+    service = RAGService.__new__(RAGService)
+    service.vectorize_service = vectorize
+
+    matches, degraded = await service._query_vectorize(
+        [0.1, 0.2], 5, ["doc-requested"], _actor()
+    )
+
+    assert matches == [requested]
+    assert degraded is False
+    assert vectorize.query.call_count == 2
+    assert "filter" not in vectorize.query.call_args_list[1].kwargs
+
+
+@pytest.mark.asyncio
 async def test_vectorize_unconfigured_is_degraded():
     vectorize = MagicMock()
     vectorize.is_configured = MagicMock(return_value=False)
