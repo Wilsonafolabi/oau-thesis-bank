@@ -66,6 +66,7 @@ const ScreenIndex = () => {
     { id: 'admin-dashboard', label: '43 — Admin Dashboard' },
     { id: 'content-moderation', label: '44 — Content Moderation' },
     { id: 'user-management', label: '45 — User Management' },
+    { id: 'admin-submissions', label: '48 — Submission Review' },
     { id: 'profile-setup', label: '46 — Profile Setup' }
   ];
 

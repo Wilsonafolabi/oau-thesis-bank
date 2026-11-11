@@ -11,7 +11,7 @@ import {
   Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
   FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
   MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
+  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar, FileCheck2
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -51,7 +51,7 @@ const screenToPath: Record<string, string> = {
   'collaboration-hub': '/collaboration', 'collab-opportunity': '/collaboration/opportunity', 'collaboration-requests': '/collaboration/requests', 'mentorship-request': '/mentorship', 'profile-setup': '/profile/setup',
   'messages': '/messages', 'conversation': '/messages/conversation', 'notifications': '/notifications', 'personal-analytics': '/analytics',
   'thesis-analytics': '/analytics/thesis', 'university-analytics': '/analytics/university', 'account-settings': '/settings', 'privacy-settings': '/settings/privacy',
-  'admin-dashboard': '/admin', 'content-moderation': '/admin/moderation', 'user-management': '/admin/users'
+  'admin-dashboard': '/admin', 'admin-submissions': '/admin/submissions', 'content-moderation': '/admin/moderation', 'user-management': '/admin/users'
 };
 
 const pathToScreen: Record<string, string> = Object.fromEntries(Object.entries(screenToPath).map(([id, path]) => [path, id]));
@@ -290,6 +290,7 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
 
   const adminItems: Array<{ id: string; label: string; icon: React.ElementType; count?: number }> = [
     { id: 'admin-dashboard', label: 'Overview', icon: Home },
+    { id: 'admin-submissions', label: 'Submission Review', icon: FileCheck2 },
     { id: 'content-moderation', label: 'Content Moderation', icon: ShieldAlert },
     { id: 'user-management', label: 'User Management', icon: Users },
     { id: 'university-analytics', label: 'Research Analytics', icon: BarChart2 },

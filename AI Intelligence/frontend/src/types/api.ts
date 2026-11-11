@@ -1,10 +1,10 @@
 export type UserRole = 'student' | 'researcher' | 'faculty' | 'admin';
 export type UserStatus = 'active' | 'suspended' | 'pending';
-export type ThesisStatus = 'draft' | 'processing' | 'published' | 'flagged';
+export type ThesisStatus = 'draft' | 'pending_review' | 'changes_requested' | 'rejected' | 'processing' | 'published' | 'flagged';
 export type AccessPolicy = 'public' | 'restricted' | 'private';
 export type ProcessingStatus = 'none' | 'queued' | 'processing' | 'completed' | 'failed';
 export type AccessRequestStatus = 'pending' | 'approved' | 'denied';
-export type NotificationType = 'access_request' | 'mentorship' | 'collaboration' | 'message' | 'system';
+export type NotificationType = 'access_request' | 'mentorship' | 'collaboration' | 'message' | 'submission_review' | 'system';
 export type AsyncStatus = 'idle' | 'loading' | 'success' | 'error';
 export type ProviderName = 'github' | 'orcid';
 export type AnalyticsMetric = 'views' | 'saves';
@@ -38,11 +38,22 @@ export interface Thesis {
   status: ThesisStatus;
   access_policy: AccessPolicy;
   file: string | null;
+  views?: number;
+  downloads?: number;
   processing_status: ProcessingStatus;
   created_at: string;
   updated_at: string;
   saved?: boolean;
   access_requests_count?: number | null;
+  review_history?: ThesisReview[];
+}
+
+export interface ThesisReview {
+  id: number;
+  decision: 'approved' | 'changes_requested' | 'rejected';
+  comments: string;
+  reviewer_name: string | null;
+  created_at: string;
 }
 
 export interface SearchResult {
@@ -181,6 +192,77 @@ export interface Paginated<T> {
   next: string | null;
   previous: string | null;
   results: T[];
+}
+
+export type AdminModerationStatus = 'pending' | 'approved' | 'dismissed';
+export type AdminFlagType = 'high_similarity' | 'standard_review' | 'metadata';
+
+export interface AdminModerationItem {
+  id: number;
+  thesis: number;
+  thesis_title: string;
+  thesis_author: string;
+  thesis_department: string;
+  flag_type: AdminFlagType;
+  similarity_score: number | null;
+  note: string;
+  reporter: number | null;
+  reporter_name: string | null;
+  status: AdminModerationStatus;
+  reviewer: number | null;
+  reviewer_name: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  department: string;
+  faculty: string;
+  avatar: string;
+  joined: string;
+}
+
+export interface AdminActivityEvent {
+  id: number;
+  actor: number | null;
+  actor_name: string | null;
+  action: string;
+  subject_type: string;
+  subject_id: number | null;
+  detail: string;
+  created_at: string;
+}
+
+export interface AdminSummary {
+  total_theses: number;
+  published_theses: number;
+  draft_theses: number;
+  restricted_theses: number;
+  total_users: number;
+  active_users: number;
+  suspended_users: number;
+  pending_moderation: number;
+  pending_review_theses: number;
+  pending_access_requests: number;
+  moderation_by_type: Record<string, number>;
+  health: { db: 'ok' | 'error'; storage: 'ok' | 'error' };
+  recent_activity: AdminActivityEvent[];
+}
+
+export interface AdminSubmission extends Thesis {
+  owner_id: number;
+  owner_name: string;
+  owner_email: string;
+}
+
+export interface AdminHealth {
+  status: 'ok' | 'error';
+  checks: { db: 'ok' | 'error'; storage: 'ok' | 'error' };
 }
 
 export interface TokenResponse {

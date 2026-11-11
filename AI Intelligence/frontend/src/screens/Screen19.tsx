@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Lock, PlusCircle, Trash2, Unlock } from 'lucide-react';
+import { Lock, PlusCircle, Send, Trash2, Unlock } from 'lucide-react';
 import { useAppRouter, Button, Card, Badge, AuthenticatedLayout } from '../components/shared';
 import { useApi } from '../hooks/useApi';
-import { apiErrorMessage, deleteThesis, listMine } from '../lib/api';
+import { apiErrorMessage, deleteThesis, listMine, submitThesisForReview } from '../lib/api';
 import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
-import { formatDate, formatStatus } from '../lib/formatters';
+import { formatDate, formatDateTime, formatStatus } from '../lib/formatters';
 
 const Screen19MyProjects = () => {
   const { navigate } = useAppRouter();
@@ -12,6 +12,7 @@ const Screen19MyProjects = () => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: number; title: string } | null>(null);
   const [actionError, setActionError] = useState('');
+  const [submittingId, setSubmittingId] = useState<number | null>(null);
   const deletingRef = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -43,11 +44,26 @@ const Screen19MyProjects = () => {
     }
   };
 
+  const submitForReview = async (event: React.MouseEvent, thesisId: number) => {
+    event.stopPropagation();
+    setSubmittingId(thesisId);
+    setActionError('');
+    try {
+      await submitThesisForReview(thesisId);
+      await refetch();
+    } catch (nextError) {
+      setActionError(apiErrorMessage(nextError, 'Unable to submit this project for review.'));
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
   return (
     <AuthenticatedLayout title="My Research Projects">
       <div className="mb-6 flex justify-end">
         <Button onClick={() => navigate('upload')}><PlusCircle className="mr-2 h-4 w-4" /> Upload new</Button>
       </div>
+      {actionError && !pendingDelete && <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{actionError}</p>}
       {loading && <LoadingState label="Loading your projects…" />}
       {error && <ErrorState onRetry={() => void refetch()} />}
       {!loading && !error && (!data || data.length === 0) && (
@@ -79,15 +95,19 @@ const Screen19MyProjects = () => {
                       <div className="text-xs text-slate-500">{thesis.department || 'Department not provided'}</div>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <Badge variant={thesis.status === 'published' ? 'green' : 'gray'}>{formatStatus(thesis.status)}</Badge>
+                      <Badge variant={thesis.status === 'published' ? 'green' : thesis.status === 'rejected' ? 'gray' : thesis.status === 'pending_review' || thesis.status === 'changes_requested' ? 'gold' : 'gray'}>{formatStatus(thesis.status)}</Badge>
                       <div className="mt-1 text-xs text-slate-400">{formatStatus(thesis.processing_status)}</div>
+                      {thesis.review_history?.[0]?.comments && <div className="mt-2 max-w-sm whitespace-pre-line text-xs leading-5 text-amber-800"><span className="font-semibold">Reviewer feedback: </span>{thesis.review_history[0].comments}<span className="mt-0.5 block text-[10px] text-slate-400">{thesis.review_history[0].reviewer_name || 'Admin'} · {formatDateTime(thesis.review_history[0].created_at)}</span></div>}
                     </td>
                     <td className="flex items-center whitespace-nowrap px-6 py-4 text-sm text-slate-500">
                       {thesis.access_policy === 'public' ? <Unlock className="mr-1 h-3 w-3" /> : <Lock className="mr-1 h-3 w-3" />}{formatStatus(thesis.access_policy)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{formatDate(thesis.created_at)}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                      <button onClick={(event) => { event.stopPropagation(); navigate('edit-thesis', { thesisId: thesis.id }); }} className="mr-4 text-[#00502F] hover:text-[#003d24]">Edit</button>
+                      {(thesis.status === 'draft' || thesis.status === 'changes_requested') && <>
+                        <button onClick={(event) => { event.stopPropagation(); navigate('edit-thesis', { thesisId: thesis.id }); }} className="mr-4 text-[#00502F] hover:text-[#003d24]">Edit</button>
+                        <button disabled={submittingId === thesis.id} onClick={(event) => void submitForReview(event, thesis.id)} className="mr-4 inline-flex items-center text-[#00502F] hover:text-[#003d24] disabled:opacity-50"><Send className="mr-1 h-3.5 w-3.5" />{submittingId === thesis.id ? 'Submitting…' : 'Submit for review'}</button>
+                      </>}
                       <button
                         aria-label={`Delete ${thesis.title}`}
                         onClick={(event) => { event.stopPropagation(); setActionError(''); setPendingDelete({ id: thesis.id, title: thesis.title }); }}

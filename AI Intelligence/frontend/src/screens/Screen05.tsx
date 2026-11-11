@@ -26,6 +26,10 @@ const Screen05Discover = () => {
   const [query, setQuery] = useState('');
   const { data, loading, error, refetch } = useApi(() => listTheses(), [], true);
   const theses = toArray(data);
+  const submitTitleSearch = () => {
+    const titleQuery = query.trim();
+    if (titleQuery) navigate('search-results', { q: titleQuery, scope: 'title' });
+  };
   return (
     <PublicOrAuthenticatedLayout title="Discover Research">
       <div className="max-w-5xl mx-auto space-y-10">
@@ -33,19 +37,20 @@ const Screen05Discover = () => {
         <div className="bg-[#00502F] rounded-2xl p-8 md:p-12 text-white shadow-lg relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="text-3xl font-bold mb-4">What are you researching?</h2>
-            <p className="text-[#D4AF37] mb-8 text-lg">Semantic search powered by AI understands concepts, not just keywords.</p>
+            <p className="text-[#D4AF37] mb-8 text-lg">Find published research by thesis title, ranked by exact and phrase matches.</p>
             <div className="flex bg-white rounded-lg p-1 shadow-sm max-w-3xl">
               <div className="flex items-center pl-4 flex-1">
                 <SearchIcon className="w-5 h-5 text-slate-400 mr-2" />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === 'Enter') navigate('search-results', { q: query }); }}
-                  placeholder="E.g., How does machine learning improve crop yields in tropical climates?"
+                  aria-label="Search thesis titles"
+                  onKeyDown={(event) => { if (event.key === 'Enter') submitTitleSearch(); }}
+                  placeholder="Search thesis titles…"
                   className="w-full py-3 text-slate-900 outline-none text-sm md:text-base"
                 />
               </div>
-              <Button onClick={() => navigate('search-results', { q: query })} className="rounded-md">Search</Button>
+              <Button onClick={submitTitleSearch} disabled={!query.trim()} className="rounded-md">Search titles</Button>
             </div>
             <div className="mt-4 flex items-center text-sm text-emerald-100 space-x-4">
               <button className="hover:text-white" onClick={() => navigate('advanced-search')}>Advanced Search</button>

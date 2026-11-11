@@ -3,7 +3,8 @@ import type {
   AccessRequest, AnalyticsBreakdownRow, AnalyticsDimension, AnalyticsMetric, AnalyticsOverview,
   AnalyticsTrendRow, CollaborationOpportunity, Conversation, MentorshipRequest, Notification,
   NotificationSummary, Paginated, ProviderName, ProviderStatus, ResearcherProfile, SearchResponse,
-  Thesis, TokenResponse, TopThesis, User, ThesisDraft,
+  Thesis, TokenResponse, TopThesis, User, ThesisDraft, AdminActivityEvent, AdminFlagType,
+  AdminHealth, AdminModerationItem, AdminModerationStatus, AdminSubmission, AdminSummary, AdminUser,
 } from '../types/api';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
@@ -160,6 +161,12 @@ export const listSaved = () => request<Thesis[]>('theses/saved/');
 export const getThesis = (id: number | string) => request<Thesis>(`theses/${id}/`);
 export const createThesis = (form: FormData) => request<Thesis>('theses/', { method: 'POST', body: form });
 export const updateThesis = (id: number | string, payload: Partial<ThesisDraft> & { status?: Thesis['status']; access_policy?: Thesis['access_policy'] }) => request<Thesis>(`theses/${id}/`, { method: 'PATCH', json: payload });
+export const replaceThesisFile = (id: number | string, file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return request<Thesis>(`theses/${id}/`, { method: 'PATCH', body: form });
+};
+export const submitThesisForReview = (id: number | string) => request<Thesis>(`theses/${id}/submit_for_review/`, { method: 'POST' });
 export const deleteThesis = (id: number | string) => request<void>(`theses/${id}/`, { method: 'DELETE' });
 export const saveThesis = (id: number | string) => request<{ saved: boolean }>(`theses/${id}/save/`, { method: 'POST' });
 export const unsaveThesis = (id: number | string) => request<{ saved: boolean }>(`theses/${id}/unsave/`, { method: 'POST' });
@@ -220,5 +227,21 @@ export const getAnalyticsOverview = () => request<AnalyticsOverview>('analytics/
 export const getTopTheses = (metric: AnalyticsMetric = 'views') => request<TopThesis[]>(queryPath('analytics/top-theses/', { metric }));
 export const getAnalyticsBreakdown = (dimension: AnalyticsDimension = 'department') => request<AnalyticsBreakdownRow[]>(queryPath('analytics/breakdown/', { dimension }));
 export const getAnalyticsTrend = (months = 6) => request<AnalyticsTrendRow[]>(queryPath('analytics/views-trend/', { months }));
+
+export const getAdminSummary = () => request<AdminSummary>('admin/summary/');
+export const getAdminActivity = (limit = 25) => request<Paginated<AdminActivityEvent> | AdminActivityEvent[]>(queryPath('admin/activity/', { limit }));
+export const getAdminHealth = () => request<AdminHealth>('admin/health/');
+export const listAdminSubmissions = (params: { q?: string; page?: number } = {}) =>
+  request<Paginated<AdminSubmission> | AdminSubmission[]>(queryPath('admin/submissions/', params));
+export const reviewAdminSubmission = (id: number, decision: 'approved' | 'changes_requested' | 'rejected', comments = '') =>
+  request<AdminSubmission>(`admin/submissions/${id}/review/`, { method: 'POST', json: { decision, comments } });
+export const listAdminModeration = (params: { status?: AdminModerationStatus; flag_type?: AdminFlagType; q?: string; page?: number } = {}) =>
+  request<Paginated<AdminModerationItem> | AdminModerationItem[]>(queryPath('admin/moderation/', params));
+export const reviewAdminModeration = (id: number, decision: 'approved' | 'dismissed', note = '') =>
+  request<AdminModerationItem>(`admin/moderation/${id}/review/`, { method: 'PATCH', json: { decision, note } });
+export const listAdminUsers = (params: { search?: string; role?: string; status?: string; page?: number } = {}) =>
+  request<Paginated<AdminUser> | AdminUser[]>(queryPath('admin/users/', params));
+export const updateAdminUserAccess = (id: number, payload: { role?: User['role']; status?: User['status'] }) =>
+  request<AdminUser>(`admin/users/${id}/update_access/`, { method: 'PATCH', json: payload });
 
 export const toArray = collection;

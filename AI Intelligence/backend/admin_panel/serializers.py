@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
 from accounts.models import User
+from theses.models import Thesis, ThesisReview
+from theses.serializers import TagField, ThesisReviewSerializer
 
 from .models import AuditEvent, ModerationItem
 
@@ -87,7 +89,52 @@ class AdminSummarySerializer(serializers.Serializer):
     active_users = serializers.IntegerField()
     suspended_users = serializers.IntegerField()
     pending_moderation = serializers.IntegerField()
+    pending_review_theses = serializers.IntegerField()
     pending_access_requests = serializers.IntegerField()
     moderation_by_type = serializers.DictField(child=serializers.IntegerField())
     health = ServiceHealthSerializer()
     recent_activity = AuditEventSerializer(many=True)
+
+
+class AdminSubmissionSerializer(serializers.ModelSerializer):
+    owner_id = serializers.IntegerField(source="owner.id", read_only=True)
+    owner_name = serializers.CharField(source="owner.display_name", read_only=True)
+    owner_email = serializers.EmailField(source="owner.email", read_only=True)
+    tags = TagField(read_only=True)
+    file_url = serializers.SerializerMethodField()
+    review_history = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Thesis
+        fields = (
+            "id", "title", "author", "owner_id", "owner_name", "owner_email",
+            "department", "faculty", "year", "abstract", "supervisor", "tags",
+            "status", "access_policy", "file_url", "processing_status", "created_at",
+            "review_history",
+        )
+        read_only_fields = fields
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
+        from django.urls import reverse
+
+        return reverse("thesis-download", args=[obj.pk])
+
+    def get_review_history(self, obj):
+        return ThesisReviewSerializer(
+            obj.review_history.select_related("reviewer").all(), many=True
+        ).data
+
+
+class AdminSubmissionReviewSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=("approved", "changes_requested", "rejected"))
+    comments = serializers.CharField(required=False, allow_blank=True, max_length=10000)
+
+    def validate(self, attrs):
+        if attrs["decision"] in ("changes_requested", "rejected") and not attrs.get("comments", "").strip():
+            raise serializers.ValidationError(
+                {"comments": "Add guidance for the user when requesting changes or rejecting a submission."}
+            )
+        attrs["comments"] = attrs.get("comments", "").strip()
+        return attrs
