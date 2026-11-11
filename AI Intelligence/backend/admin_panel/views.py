@@ -1,4 +1,4 @@
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -10,12 +10,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import User
-from theses.models import AccessRequest, Thesis
+from notifications.models import Notification
+from notifications.services import notify
+from theses.models import AccessRequest, Thesis, ThesisReview
 
 from .models import AuditEvent, ModerationItem
 from .permissions import IsAdminUser
 from .serializers import (
     AdminSummarySerializer,
+    AdminSubmissionReviewSerializer,
+    AdminSubmissionSerializer,
     AuditEventSerializer,
     ModerationItemSerializer,
     ModerationReviewSerializer,
@@ -70,6 +74,9 @@ class AdminSummaryView(APIView):
                 "pending_moderation": ModerationItem.objects.filter(
                     status=ModerationItem.Status.PENDING
                 ).count(),
+                "pending_review_theses": Thesis.objects.filter(
+                    status=Thesis.Status.PENDING_REVIEW
+                ).count(),
                 "pending_access_requests": AccessRequest.objects.filter(
                     status=AccessRequest.Status.PENDING
                 ).count(),
@@ -83,6 +90,84 @@ class AdminSummaryView(APIView):
                 ).data,
             }
         )
+
+
+class SubmissionReviewViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Admin queue for newly submitted theses and user resubmissions."""
+
+    serializer_class = AdminSubmissionSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        qs = (
+            Thesis.objects.filter(status=Thesis.Status.PENDING_REVIEW)
+            .select_related("owner")
+            .prefetch_related("tags", "review_history__reviewer")
+            .order_by("created_at")
+        )
+        search = (self.request.query_params.get("q") or "").strip()
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search)
+                | Q(author__icontains=search)
+                | Q(owner__email__icontains=search)
+                | Q(owner__first_name__icontains=search)
+                | Q(owner__last_name__icontains=search)
+                | Q(department__icontains=search)
+            )
+        return qs
+
+    @extend_schema(request=AdminSubmissionReviewSerializer, responses={200: AdminSubmissionSerializer})
+    @action(detail=True, methods=["post"])
+    def review(self, request, pk=None):
+        thesis = self.get_object()
+        serializer = AdminSubmissionReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        decision = serializer.validated_data["decision"]
+        comments = serializer.validated_data["comments"]
+        status_by_decision = {
+            "approved": Thesis.Status.PUBLISHED,
+            "changes_requested": Thesis.Status.CHANGES_REQUESTED,
+            "rejected": Thesis.Status.REJECTED,
+        }
+        with transaction.atomic():
+            thesis.status = status_by_decision[decision]
+            thesis.save(update_fields=["status", "updated_at"])
+            ThesisReview.objects.create(
+                thesis=thesis,
+                reviewer=request.user,
+                decision=decision,
+                comments=comments,
+            )
+        log_event(
+            actor=request.user,
+            action=f"thesis.{decision}",
+            subject_type="thesis",
+            subject_id=thesis.id,
+            detail=f"{decision.replace('_', ' ')} '{thesis.title}'",
+        )
+
+        if decision == "approved":
+            title = "Your thesis has been approved"
+            message = f"'{thesis.title}' has been approved and published."
+        elif decision == "changes_requested":
+            title = "Updates requested for your thesis"
+            message = f"Please update '{thesis.title}' and resubmit it for review.\n\n{comments}"
+        else:
+            title = "Your thesis submission was declined"
+            message = f"'{thesis.title}' was declined.\n\n{comments}"
+        notify(
+            recipient=thesis.owner,
+            actor=request.user,
+            notification_type=Notification.Type.SUBMISSION_REVIEW,
+            title=title,
+            message=message,
+        )
+        return Response(self.get_serializer(thesis).data)
 
 
 class ModerationViewSet(

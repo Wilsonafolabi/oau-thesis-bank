@@ -1,10 +1,18 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import ActivityView, AdminSummaryView, HealthView, ModerationViewSet, UserManagementViewSet
+from .views import (
+    ActivityView,
+    AdminSummaryView,
+    HealthView,
+    ModerationViewSet,
+    SubmissionReviewViewSet,
+    UserManagementViewSet,
+)
 
 router = DefaultRouter()
 router.register("moderation", ModerationViewSet, basename="admin-moderation")
+router.register("submissions", SubmissionReviewViewSet, basename="admin-submission")
 router.register("users", UserManagementViewSet, basename="admin-user")
 
 urlpatterns = [

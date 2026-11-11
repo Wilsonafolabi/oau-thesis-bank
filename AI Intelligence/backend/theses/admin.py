@@ -9,7 +9,7 @@ from ai_integration.services import (
     forward_to_v2,
     get_internal_service_token,
 )
-from .models import AccessRequest, SavedThesis, Tag, Thesis
+from .models import AccessRequest, SavedThesis, Tag, Thesis, ThesisReview
 
 
 class ThesisAdmin(admin.ModelAdmin):
@@ -177,3 +177,4 @@ admin.site.register(Thesis, ThesisAdmin)
 admin.site.register(Tag)
 admin.site.register(SavedThesis)
 admin.site.register(AccessRequest)
+admin.site.register(ThesisReview)

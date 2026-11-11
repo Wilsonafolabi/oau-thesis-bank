@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db.models import F, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
@@ -15,6 +16,20 @@ from notifications.services import notify
 
 from .models import AccessRequest, SavedThesis, Thesis
 from .serializers import AccessRequestSerializer, ThesisListSerializer, ThesisSerializer
+
+User = get_user_model()
+
+
+def _notify_admins(actor, thesis, title, message):
+    admins = User.objects.filter(role="admin", status="active", is_active=True).exclude(pk=actor.pk)
+    for admin in admins:
+        notify(
+            recipient=admin,
+            actor=actor,
+            notification_type=Notification.Type.SUBMISSION_REVIEW,
+            title=title,
+            message=message,
+        )
 
 
 def _can_view_thesis(thesis, user):
@@ -72,9 +87,12 @@ class ThesisViewSet(viewsets.ModelViewSet):
             "save",
             "unsave",
             "flag",
+            "submit_for_review",
         ):
             qs = Thesis.objects.select_related("owner").prefetch_related("tags")
-            return qs.prefetch_related("access_requests")
+            return qs.prefetch_related(
+                "access_requests", "review_history__reviewer"
+            )
         # Listing never leaks draft/restricted/private content.
         return (
             Thesis.objects.select_related("owner")
@@ -83,13 +101,19 @@ class ThesisViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        thesis = serializer.save()
+        thesis = serializer.save(owner=self.request.user, status=Thesis.Status.PENDING_REVIEW)
         log_event(
             actor=self.request.user,
             action="thesis.uploaded",
             subject_type="thesis",
             subject_id=thesis.id,
-            detail=f"'{thesis.title}' (status={thesis.status})",
+            detail=f"'{thesis.title}' submitted for admin review",
+        )
+        _notify_admins(
+            self.request.user,
+            thesis,
+            "Thesis awaiting review",
+            f"{self.request.user.display_name} submitted '{thesis.title}' for review.",
         )
 
     def retrieve(self, request, *args, **kwargs):
@@ -110,6 +134,14 @@ class ThesisViewSet(viewsets.ModelViewSet):
                 {"detail": "Only the owner (or an admin) may edit this thesis."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if request.user.role != "admin" and thesis.status not in (
+            Thesis.Status.DRAFT,
+            Thesis.Status.CHANGES_REQUESTED,
+        ):
+            return Response(
+                {"detail": "This submission is locked while it is under review or published."},
+                status=status.HTTP_409_CONFLICT,
+            )
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
@@ -125,12 +157,47 @@ class ThesisViewSet(viewsets.ModelViewSet):
     def mine(self, request):
         theses = (
             Thesis.objects.select_related("owner")
-            .prefetch_related("tags")
+            .prefetch_related("tags", "review_history__reviewer")
             .filter(owner=request.user)
             .order_by("-created_at")
         )
         serializer = ThesisSerializer(theses, many=True, context={"request": request})
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsActiveUser])
+    def submit_for_review(self, request, id=None):
+        thesis = self.get_object()
+        if thesis.owner_id != request.user.id:
+            return Response(
+                {"detail": "Only the owner may submit this thesis for review."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if thesis.status not in (Thesis.Status.DRAFT, Thesis.Status.CHANGES_REQUESTED):
+            return Response(
+                {"detail": "Only drafts or submissions returned for changes can be resubmitted."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not thesis.file:
+            return Response(
+                {"detail": "Upload a PDF before submitting this thesis for review."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        thesis.status = Thesis.Status.PENDING_REVIEW
+        thesis.save(update_fields=["status", "updated_at"])
+        log_event(
+            actor=request.user,
+            action="thesis.resubmitted",
+            subject_type="thesis",
+            subject_id=thesis.id,
+            detail=f"'{thesis.title}' submitted for admin review",
+        )
+        _notify_admins(
+            request.user,
+            thesis,
+            "Thesis resubmitted for review",
+            f"{request.user.display_name} resubmitted '{thesis.title}' for review.",
+        )
+        return Response(self.get_serializer(thesis).data)
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsActiveUser])
     def save(self, request, id=None):

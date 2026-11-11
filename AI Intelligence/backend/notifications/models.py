@@ -8,6 +8,7 @@ class Notification(models.Model):
         MENTORSHIP = "mentorship", "Mentorship"
         COLLABORATION = "collaboration", "Collaboration"
         MESSAGE = "message", "Message"
+        SUBMISSION_REVIEW = "submission_review", "Submission review"
         SYSTEM = "system", "System"
 
     recipient = models.ForeignKey(

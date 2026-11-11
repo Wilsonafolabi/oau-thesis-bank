@@ -1,24 +1,95 @@
-import React, { useState } from 'react';
-import { BarChart2, FileText, HeartPulse, TrendingUp, Users } from 'lucide-react';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { AuthenticatedLayout, Card, Badge } from '../components/shared';
+import { Activity, ArrowRight, CheckCircle2, ClipboardList, Database, FileText, HardDrive, Users } from 'lucide-react';
+import { AuthenticatedLayout, Badge, Button, Card, useAppRouter } from '../components/shared';
+import { ErrorState, LoadingState } from '../components/AsyncState';
 import { useApi } from '../hooks/useApi';
-import { ApiError, getAnalyticsBreakdown, getAnalyticsOverview, getAnalyticsTrend, getTopTheses } from '../lib/api';
-import { ErrorState, LoadingState, EmptyState } from '../components/AsyncState';
-import { formatCount, formatMonth } from '../lib/formatters';
-import type { AnalyticsDimension, AnalyticsMetric } from '../types/api';
+import { getAdminActivity, getAdminHealth, getAdminSummary, toArray } from '../lib/api';
+import { formatApiError, formatCount, formatDateTime, formatStatus } from '../lib/formatters';
 
 const Screen43AdminDashboard = () => {
-  const [dimension, setDimension] = useState<AnalyticsDimension>('department');
-  const [metric, setMetric] = useState<AnalyticsMetric>('views');
-  const { data, loading, error, refetch } = useApi(async () => Promise.all([getAnalyticsOverview(), getAnalyticsBreakdown(dimension), getAnalyticsTrend(6), getTopTheses(metric)]), [dimension, metric], true);
-  if (loading) return <AuthenticatedLayout title="Admin Dashboard" admin><LoadingState label="Loading platform analytics…" /></AuthenticatedLayout>;
-  if (error || !data) return <AuthenticatedLayout title="Admin Dashboard" admin><ErrorState message={error instanceof ApiError && error.status === 403 ? 'Admin or faculty permissions are required for analytics.' : 'Unable to load platform analytics.'} onRetry={() => void refetch()} /></AuthenticatedLayout>;
-  const [overview, rawBreakdown, rawTrend, topTheses] = data;
-  const trend = [...rawTrend].sort((a, b) => String(a.month).localeCompare(String(b.month))).map((row) => ({ ...row, label: formatMonth(row.month) }));
-  const breakdown = rawBreakdown.map((row) => ({ ...row, label: row[dimension] ?? 'Not provided' }));
-  const stats: Array<{ icon: React.ComponentType<{ className?: string }>; value: number; label: string }> = [{ icon: FileText, value: overview.total_theses, label: 'Total theses' }, { icon: Users, value: overview.active_users, label: 'Active users' }, { icon: TrendingUp, value: overview.published_theses, label: 'Published theses' }, { icon: HeartPulse, value: overview.total_views, label: 'Total views' }];
-  return <AuthenticatedLayout title="Admin Dashboard" admin><div className="mx-auto max-w-7xl space-y-6 pb-10"><div><div className="flex flex-wrap items-center gap-2"><Badge variant="green">Operations center</Badge><span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live analytics</span></div><h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Platform control center</h2><p className="mt-1 max-w-2xl text-sm text-slate-500">Live totals and trends from the Django analytics endpoints.</p></div><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ icon: Icon, value, label }) => <Card key={label} className="p-5"><Icon className="h-5 w-5 text-[#00502F]" /><p className="mt-5 text-2xl font-bold">{formatCount(value)}</p><p className="mt-1 text-xs font-semibold text-slate-700">{label}</p></Card>)}</div><div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-end"><label className="text-sm font-medium text-slate-700">Breakdown by<select value={dimension} onChange={(event) => setDimension(event.target.value as AnalyticsDimension)} className="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="department">Department</option><option value="faculty">Faculty</option><option value="year">Year</option></select></label><label className="text-sm font-medium text-slate-700">Top theses metric<select value={metric} onChange={(event) => setMetric(event.target.value as AnalyticsMetric)} className="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="views">Views</option><option value="saves">Saves</option></select></label></div><div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.65fr_1fr]"><Card className="p-5 sm:p-6"><div className="flex items-center gap-2"><h3 className="font-bold">Platform activity</h3><BarChart2 className="h-5 w-5 text-slate-400" /></div><p className="mt-1 text-xs text-slate-500">Views and saves from the connected analytics service.</p>{trend.length === 0 ? <div className="mt-5"><EmptyState title="No activity yet" /></div> : <div className="mt-5 h-72"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="label" /><YAxis /><Tooltip /><Area type="monotone" dataKey="views" stroke="#00502F" fill="#00502F" fillOpacity={0.14} /><Area type="monotone" dataKey="saves" stroke="#D4AF37" fill="none" /></AreaChart></ResponsiveContainer></div>}</Card><Card className="p-5 sm:p-6"><h3 className="font-bold">Research distribution</h3><p className="mt-1 text-xs text-slate-500">Published theses by {dimension}.</p>{breakdown.length === 0 ? <div className="mt-5"><EmptyState title="No distribution yet" /></div> : <div className="mt-5 h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={breakdown} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" /><YAxis dataKey="label" type="category" width={110} /><Tooltip /><Bar dataKey="count" fill="#00502F" radius={[0, 5, 5, 0]} /></BarChart></ResponsiveContainer></div>}</Card></div><Card className="overflow-hidden"><div className="border-b border-slate-200 p-5"><h3 className="font-bold">Top theses by {metric}</h3><p className="mt-1 text-xs text-slate-500">The ten highest-ranked published records from the analytics service.</p></div>{topTheses.length === 0 ? <div className="p-5"><EmptyState title="No top theses yet" /></div> : <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200"><thead className="bg-slate-50"><tr>{['Title', 'Department', 'Views', 'Saves'].map((heading) => <th key={heading} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-200">{topTheses.map((thesis) => <tr key={thesis.id} className="hover:bg-slate-50"><td className="max-w-md px-5 py-4"><p className="truncate text-sm font-semibold text-slate-900">{thesis.title}</p><p className="text-xs text-slate-500">{thesis.author}</p></td><td className="px-5 py-4 text-sm text-slate-600">{thesis.department || '—'}</td><td className="px-5 py-4 text-sm text-slate-600">{formatCount(thesis.views)}</td><td className="px-5 py-4 text-sm text-slate-600">{formatCount(thesis.save_count)}</td></tr>)}</tbody></table></div>}</Card></div></AuthenticatedLayout>;
+  const { navigate, user } = useAppRouter();
+  const { data, loading, error, refetch } = useApi(async () => Promise.all([
+    getAdminSummary(), getAdminActivity(8), getAdminHealth(),
+  ]), [], true);
+
+  if (loading) return <AuthenticatedLayout title="Admin Overview" admin><LoadingState label="Loading platform operations…" /></AuthenticatedLayout>;
+  if (error || !data) return <AuthenticatedLayout title="Admin Overview" admin><ErrorState message={formatApiError(error, 'Unable to load admin operations.')} onRetry={() => void refetch()} /></AuthenticatedLayout>;
+
+  const [summary, activityPayload, health] = data;
+  const activity = toArray(activityPayload);
+  const stats = [
+    { icon: FileText, label: 'Total theses', value: summary.total_theses, note: `${formatCount(summary.published_theses)} published` },
+    { icon: Users, label: 'Active users', value: summary.active_users, note: `${formatCount(summary.total_users)} accounts` },
+    { icon: ClipboardList, label: 'Pending submissions', value: summary.pending_review_theses, note: 'Needs publication review', alert: summary.pending_review_theses > 0 },
+    { icon: ClipboardList, label: 'Access requests', value: summary.pending_access_requests, note: 'Waiting for a decision' },
+  ];
+  const serviceChecks = [
+    { icon: Database, label: 'Database', status: health.checks.db },
+    { icon: HardDrive, label: 'File storage', status: health.checks.storage },
+  ];
+
+  return (
+    <AuthenticatedLayout title="Admin Overview" admin>
+      <div className="mx-auto max-w-7xl space-y-6 pb-10">
+        <section className="flex flex-col justify-between gap-5 rounded-2xl bg-[#00502F] p-6 text-white sm:flex-row sm:items-end sm:p-8">
+          <div>
+            <div className="flex items-center gap-2"><Badge variant="gold">Operations center</Badge><span className="text-xs text-emerald-100">Signed in as {user?.name || user?.email}</span></div>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">Good to see you, {user?.name?.split(' ')[0] || 'Admin'}.</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-100">Review new theses, keep content standards high, and manage platform access.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => navigate('admin-submissions')}><ClipboardList className="mr-2 h-4 w-4" /> Submission queue</Button>
+            <Button className="bg-[#D4AF37] text-slate-950 hover:bg-yellow-400 focus:ring-[#D4AF37]" onClick={() => navigate('user-management')}><Users className="mr-2 h-4 w-4" /> Manage users</Button>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.map(({ icon: Icon, label, value, note, alert }) => (
+            <Card key={label} className="p-5">
+              <div className="flex items-start justify-between"><span className="rounded-xl bg-emerald-50 p-2.5 text-[#00502F]"><Icon className="h-5 w-5" /></span>{alert && <Badge variant="gold">Action needed</Badge>}</div>
+              <p className="mt-5 text-3xl font-bold tracking-tight text-slate-900">{formatCount(value)}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-700">{label}</p>
+              <p className="mt-1 text-xs text-slate-500">{note}</p>
+            </Card>
+          ))}
+        </section>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.4fr]">
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-start justify-between"><div><h3 className="font-bold text-slate-900">Platform health</h3><p className="mt-1 text-xs text-slate-500">Live checks for core services</p></div><Activity className="h-5 w-5 text-slate-400" /></div>
+            <div className="mt-5 space-y-3">
+              {serviceChecks.map(({ icon: Icon, label, status }) => (
+                <div key={label} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <span className="flex items-center gap-3 text-sm font-medium text-slate-700"><Icon className="h-4 w-4 text-slate-400" />{label}</span>
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${status === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}><span className={`h-1.5 w-1.5 rounded-full ${status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />{status === 'ok' ? 'Operational' : 'Needs attention'}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-emerald-50 p-4"><p className="text-xs text-emerald-800">Published theses</p><p className="mt-1 text-xl font-bold text-[#00502F]">{formatCount(summary.published_theses)}</p></div>
+              <div className="rounded-xl bg-amber-50 p-4"><p className="text-xs text-amber-800">Suspended accounts</p><p className="mt-1 text-xl font-bold text-amber-900">{formatCount(summary.suspended_users)}</p></div>
+            </div>
+            <button onClick={() => navigate('university-analytics')} className="mt-5 flex w-full items-center justify-between border-t border-slate-100 pt-4 text-left text-sm font-semibold text-[#00502F] hover:text-emerald-800">Open research analytics<ArrowRight className="h-4 w-4" /></button>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-start justify-between"><div><h3 className="font-bold text-slate-900">Recent admin activity</h3><p className="mt-1 text-xs text-slate-500">Latest recorded changes across the platform</p></div><Activity className="h-5 w-5 text-slate-400" /></div>
+            {activity.length === 0 ? (
+              <div className="mt-8 rounded-xl border border-dashed border-slate-200 p-8 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-semibold text-slate-700">No activity recorded yet</p><p className="mt-1 text-xs text-slate-500">Admin and review actions will appear here.</p></div>
+            ) : (
+              <div className="mt-4 divide-y divide-slate-100">
+                {activity.map((event) => (
+                  <div key={event.id} className="flex gap-3 py-3.5 first:pt-1 last:pb-1">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-[#00502F]"><Activity className="h-4 w-4" /></span>
+                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><p className="text-sm font-semibold text-slate-800">{formatStatus(event.action)}</p><span className="text-xs text-slate-400">{formatDateTime(event.created_at)}</span></div><p className="mt-1 truncate text-xs text-slate-500">{event.actor_name || 'System'}{event.detail ? ` · ${event.detail}` : ''}</p></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </AuthenticatedLayout>
+  );
 };
 
 export default Screen43AdminDashboard;

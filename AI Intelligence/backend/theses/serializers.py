@@ -3,11 +3,22 @@ from django.urls import reverse
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from .models import AccessRequest, SavedThesis, Tag, Thesis
+from .models import AccessRequest, SavedThesis, Tag, Thesis, ThesisReview
 
 User = get_user_model()
 
 MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+class ThesisReviewSerializer(serializers.ModelSerializer):
+    reviewer_name = serializers.CharField(
+        source="reviewer.display_name", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ThesisReview
+        fields = ("id", "decision", "comments", "reviewer_name", "created_at")
+        read_only_fields = fields
 
 
 class TagField(serializers.ListField):
@@ -36,6 +47,7 @@ class ThesisSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     saved = serializers.SerializerMethodField()
     access_requests_count = serializers.SerializerMethodField()
+    review_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Thesis
@@ -61,8 +73,11 @@ class ThesisSerializer(serializers.ModelSerializer):
             "updated_at",
             "saved",
             "access_requests_count",
+            "review_history",
         )
-        read_only_fields = ("created_at", "updated_at", "processing_status", "views", "downloads")
+        read_only_fields = (
+            "created_at", "updated_at", "processing_status", "views", "downloads", "status",
+        )
         # write_only keeps the model validators (extension/PDF/size) in place
         # while stopping the stored object from being serialized back out.
         extra_kwargs = {"file": {"write_only": True}}
@@ -93,6 +108,17 @@ class ThesisSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated or user.id != obj.owner_id:
             return None
         return obj.access_requests.filter(status=AccessRequest.Status.PENDING).count()
+
+    def get_review_history(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return []
+        if user.id != obj.owner_id and user.role != "admin":
+            return []
+        return ThesisReviewSerializer(
+            obj.review_history.select_related("reviewer").all(), many=True
+        ).data
 
     def validate_file(self, file):
         if file.size > MAX_PDF_SIZE:

@@ -48,13 +48,14 @@ import Screen43 from './screens/Screen43';
 import Screen44 from './screens/Screen44';
 import Screen45 from './screens/Screen45';
 import Screen47 from './screens/Screen47';
+import Screen48 from './screens/Screen48';
 import ScreenAIWritingDetection from './screens/ScreenAIWritingDetection';
 import ScreenPlagiarismAssess from './screens/ScreenPlagiarismAssess';
 
 export default function App() {
   const { currentScreen, user, navigate, authLoading } = useAppRouter();
   const screenId = currentScreen.id === 'landing' && user ? 'discover' : currentScreen.id;
-  const adminScreen = screenId === 'admin-dashboard' || screenId === 'content-moderation' || screenId === 'user-management';
+  const adminScreen = screenId === 'admin-dashboard' || screenId === 'admin-submissions' || screenId === 'content-moderation' || screenId === 'user-management';
   const publicScreens = ['landing', 'login', 'signup', 'password-reset', 'screen-index', 'discover', 'search-results', 'advanced-search', 'thesis-detail', 'pdf-reader'];
   const protectedScreen = !publicScreens.includes(screenId);
 
@@ -130,6 +131,7 @@ function renderScreen(id: string) {
       case 'account-settings': return <Screen41 />;
       case 'privacy-settings': return <Screen42 />;
       case 'admin-dashboard': return <Screen43 />;
+      case 'admin-submissions': return <Screen48 />;
       case 'content-moderation': return <Screen44 />;
       case 'user-management': return <Screen45 />;
       case 'collaboration-requests': return <Screen32 />;

@@ -18,6 +18,9 @@ class Thesis(models.Model):
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
+        PENDING_REVIEW = "pending_review", "Pending review"
+        CHANGES_REQUESTED = "changes_requested", "Changes requested"
+        REJECTED = "rejected", "Rejected"
         PROCESSING = "processing", "Processing"
         PUBLISHED = "published", "Published"
         FLAGGED = "flagged", "Flagged"
@@ -95,6 +98,34 @@ class Thesis(models.Model):
         if self.is_public():
             return self.status == self.Status.PUBLISHED
         return False
+
+
+class ThesisReview(models.Model):
+    """An admin decision and feedback note for a thesis submission."""
+
+    class Decision(models.TextChoices):
+        APPROVED = "approved", "Approved"
+        CHANGES_REQUESTED = "changes_requested", "Changes requested"
+        REJECTED = "rejected", "Rejected"
+
+    thesis = models.ForeignKey(Thesis, related_name="review_history", on_delete=models.CASCADE)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="thesis_reviews",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    decision = models.CharField(max_length=24, choices=Decision.choices)
+    comments = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=["decision", "created_at"])]
+
+    def __str__(self):
+        return f"{self.decision} — {self.thesis.title}"
 
 
 class SavedThesis(models.Model):
