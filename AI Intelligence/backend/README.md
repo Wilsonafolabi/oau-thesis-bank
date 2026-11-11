@@ -1,7 +1,7 @@
 # OAU Thesis Bank — Backend
 
 Django REST Framework API for the OAU Thesis Bank.
-PostgreSQL 16 + MinIO (S3-compatible object storage) + Django dev server, all via Docker Compose.
+PostgreSQL 16 + RustFS (S3-compatible object storage) + Django dev server, all via Docker Compose.
 
 ## Run locally with Docker
 
@@ -10,7 +10,7 @@ Prerequisites: Docker Engine with Compose v2 (Docker Desktop on macOS/Windows wo
 ```bash
 git clone <repository-url> && cd oau-thesis-bank/backend
 
-# Build and start the full stack (db + minio + minio-init + backend).
+# Build and start the full stack (db + storage + bucket init + backend).
 # The backend container automatically runs wait_for_db -> migrate -> runserver.
 docker compose up --build -d
 
@@ -23,7 +23,7 @@ Then open:
 - Swagger UI:  http://localhost:8000/api/docs/
 - ReDoc:       http://localhost:8000/api/docs/redoc/
 - OpenAPI:     http://localhost:8000/api/schema/
-- MinIO console (object storage): http://localhost:9001/ (user `oau`, password `oau-thesis-secret`)
+- RustFS console (object storage): http://localhost:9001/ (user `oau-thesis-access`, password `oau-thesis-secret`)
 
 ### Demo accounts (created by `seed`)
 
@@ -41,7 +41,7 @@ Password for all: `oau-thesis-demo-password`
 |---|---|---|
 | 8000 | Django API | main endpoint |
 | 5432 | PostgreSQL | change the `db > ports` mapping if you already run Postgres locally |
-| 9000 / 9001 | MinIO API / console | |
+| 9000 / 9001 | RustFS S3 API / console | |
 
 Stop everything with `docker compose down` (volumes persist; wipe data with `docker compose down -v`).
 
@@ -59,8 +59,8 @@ editing the compose file.
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `oau_thesis_bank` / `oau` / `oau` | database |
 | `POSTGRES_HOST` / `POSTGRES_PORT` | `db` / `5432` | database connection |
 | `STORAGE_PROVIDER` | `local` | `local`, `minio`, or `r2` (Cloudflare R2 for prod) |
-| `STORAGE_ENDPOINT_URL` | `http://minio:9000` | `http://<ACCOUNT_ID>.r2.cloudflarestorage.com` for R2 |
-| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | `oau` / `oau-thesis-secret` | object store credentials |
+| `STORAGE_ENDPOINT_URL` | `http://storage:9000` | `http://<ACCOUNT_ID>.r2.cloudflarestorage.com` for R2 |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | `oau-thesis-access` / `oau-thesis-secret` | object store credentials |
 | `STORAGE_BUCKET_NAME` | `oau-thesis-bank` | bucket (MinIO: auto-created by `minio-init`) |
 | `STORAGE_REGION` | `auto` (R2) / `us-east-1` (MinIO) | leave blank for the provider default |
 | `EMAIL_BACKEND` | console | `django.core.mail.backends.console.EmailBackend` in dev |
@@ -99,8 +99,6 @@ docker compose exec backend sh -c "uv sync --dev && pytest"
 
 ## Troubleshooting
 
-- **`NoSuchBucket` on uploads** — the `minio-init` service creates the bucket on startup. Re-run
-  `docker compose up -d` or create it manually: `mc alias set local http://localhost:9000 oau oau-thesis-secret && mc mb local/oau-thesis-bank`.
-- **Docker Hub pull denied for MinIO** — the compose file pins `quay.io/minio/minio`, which does not require Docker Hub access. Don't switch it to `minio/minio`.
+- **Storage bucket missing** — the `storage-init` service creates the bucket on startup. Re-run `docker compose up -d` to retry initialization.
 - **Port 5432 already in use** — change the host mapping, e.g. `"5433:5432"`.
 - **Old database kept after re-seeding** — the PostgreSQL volume is named and persists across `docker compose down`. Run `docker compose down -v` (destroys all data) and `up` to start clean.
